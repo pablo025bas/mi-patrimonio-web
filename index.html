@@ -626,7 +626,7 @@ function download(name,content,type){
 }
 
 /* ============ OneDrive por internet (Microsoft Graph): iPhone, iPad y cualquier navegador ============ */
-const OD_CLIENT_ID_DEFAULT='';   // ID de aplicación (cliente) de Microsoft Entra; se rellena al publicar la app
+const OD_CLIENT_ID_DEFAULT='4e470008-bc23-4165-855f-99d5d9ed7367';   // ID de aplicación (cliente) de Microsoft Entra; se rellena al publicar la app
 const OD_SCOPE='Files.ReadWrite offline_access User.Read';
 const OD_AUTH='https://login.microsoftonline.com/common/oauth2/v2.0';
 const odClient=()=>ls.get('od_client')||OD_CLIENT_ID_DEFAULT;
