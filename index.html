@@ -1489,6 +1489,8 @@ function ensureGastos(d){
   if(d.reglasVer<3){ const ya=new Set(d.reglas.map(r=>norm(r.texto))); ['alquiler','comunidad de propietarios','hipoteca','seguro hogar'].forEach(texto=>{ if(!ya.has(norm(texto))) d.reglas.push({texto,cat:'vivienda'}); }); ['cajero','ret efectivo','reintegro'].forEach(texto=>{ if(!ya.has(norm(texto))) d.reglas.push({texto,cat:'otros'}); }); d.reglasVer=3; }
   // Versiones antiguas traían una regla de ingresos con el nombre de una empresa: una compra ahí contaba como ingreso. Se conservan solo las reglas de ingresos genéricas.
   if(d.reglasVer<4){ const OK=['nomina','salario','interest payment','cash reward','bonificacion','dividendo','dividend']; d.reglas=d.reglas.filter(r=>!(r.cat==='ingresos' && !r.u && !OK.includes(r.texto))); d.reglasVer=4; }
+  // La limpieza anterior quitó la regla pero no corrigió los pagos ya categorizados con ella: se recategorizan las salidas automáticas marcadas como ingreso.
+  if(d.reglasVer<5){ const ing=new Set(d.categorias.filter(c=>c.tipo==='ingreso').map(c=>c.id)); (d.gastos||[]).forEach(g=>{ if(g.auto!==false && g.importe<0 && ing.has(g.cat)){ g.cat=null; g.catFuente='signo'; } }); d.reglasVer=5; }
   if(!d.perfilesImport) d.perfilesImport={};
 }
 const norm = s => ' '+String(s??'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,' ').trim()+' ';
@@ -1503,6 +1505,7 @@ function autoCat(g){
   if(!c && /\bbizum\b/i.test(txt)){ c=g.importe<0?'bizum':'ingresos'; f='bizum'; } // 3) Bizum: enviados = gasto, recibidos = ingreso
   if(!c){ c=catDeRegla(txt); f='regla'; }                      // 4) reglas por defecto
   if(!c){ c=g.importe>0?'ingresos':null; f='signo'; }          // 4) por el signo
+  if(c && g.importe<0 && catTipo(c)==='ingreso') { c=null; f='signo'; } // una salida de dinero nunca se clasifica sola como ingreso
   g.cat=c; g.catFuente=f; g.auto=true;
 }
 // ¿Es un movimiento entre tus propias cuentas? (salvo que el concepto diga claramente otra cosa)
@@ -1790,7 +1793,7 @@ function renderImport(){
     const us=ultimoSaldo(res); if(us && imp.cuentaPat){ const ps=D.saldosBanco[imp.cuentaPat]; if(!ps || us.fecha>=ps.fecha){ const nuevo={fecha:us.fecha,saldo:us.saldo,origen:imp.cuenta}; lote.saldo={id:imp.cuentaPat,prev:ps||null,nuevo}; D.saldosBanco[imp.cuentaPat]=nuevo; } }
     if(n || lote.conc.length){ D.importaciones=[lote,...(D.importaciones||[])].slice(0,40); informe?.lotes.push(lote.id); }
     if(res.length) gMes=res.map(r=>r.fecha).sort().at(-1).slice(0,7);
-    if(informe) informe.archivos.push({file:imp.file,cuenta:imp.cuenta});
+    if(informe){ informe.archivos.push({file:imp.file,cuenta:imp.cuenta}); const fs=res.map(r=>r.fecha).sort(); if(fs.length) informe.rangos.push({desde:fs[0],hasta:fs.at(-1),cuentaPat:imp.cuentaPat||null}); }
     imp=null; await save(); renderImport(); renderGastos(); toast(`${n} movimientos importados`); siguienteExtracto();
   };
 }
@@ -2687,7 +2690,7 @@ let colaExtractos=[], informe=null;
 function recibirArchivos(files){
   const fs=[...files].filter(f=>/\.(pdf|csv|txt|xlsx|xls|xlsm)$/i.test(f.name));
   if(!fs.length){ toast('Formato no admitido: usa PDF, Excel o CSV'); return; }
-  informe={archivos:[],gastos:[],ap:0,lotes:[]};
+  informe={archivos:[],gastos:[],ap:0,lotes:[],rangos:[]};
   colaExtractos=fs; siguienteExtracto(true);
 }
 async function siguienteExtracto(inicio){
@@ -2698,8 +2701,18 @@ async function siguienteExtracto(inicio){
   }
   if(!inicio) renderInforme();
 }
+// Pagos de Apple Pay dentro del periodo de un extracto importado que el banco no ha reflejado (el banco apunta el cargo hasta 5 días después: se deja ese margen)
+function apSinConfirmar(){
+  if(!informe) return [];
+  return D.gastos.filter(g=>{
+    if(g.origen!=='Apple Pay' || g.conc || g.fechaAprox) return false;
+    const cAp=cuentaDeTarjeta(g.tarjeta), t=toDate(g.fecha).getTime();
+    return (informe.rangos||[]).some(r=>g.fecha>=r.desde && (toDate(r.hasta).getTime()-t)/864e5>=5 && !(cAp && r.cuentaPat && cAp!==r.cuentaPat));
+  }).sort((a,b)=>a.fecha<b.fecha?-1:1);
+}
 function renderInforme(){
-  const el=$('#gReport'); if(!informe || !informe.gastos.length && !informe.ap){ el.classList.add('hidden'); return; }
+  const el=$('#gReport'); if(!informe || !informe.gastos.length && !informe.ap && !apSinConfirmar().length){ el.classList.add('hidden'); return; }
+  const sinConf=apSinConfirmar();
   const G=informe.gastos, tipo=g=>g.cat?catTipo(g.cat):(g.importe<0?'gasto':'ingreso');
   const gastos=G.filter(g=>tipo(g)==='gasto'), ingresos=G.filter(g=>tipo(g)==='ingreso'), internos=G.filter(g=>tipo(g)==='interno');
   const gT=-gastos.reduce((a,g)=>a+efectivo(g),0), iT=ingresos.reduce((a,g)=>a+efectivo(g),0), inT=internos.reduce((a,g)=>a+g.importe,0);
@@ -2718,6 +2731,7 @@ function renderInforme(){
     </div>
     <div class="grid two"><div><div class="muted" style="font-size:12.5px;margin-bottom:4px">En qué se ha ido</div><div class="bars">${cats.map(([id,v])=>`<div class="row"><span>${esc(id?catNombre(id):'Sin categoría')}</span><div class="track"><div class="fill" style="width:${Math.max(1,v/max*100)}%;background:${id?'var(--s1)':'var(--s4)'}"></div></div><span class="num" style="text-align:right">${eur.format(v)}<span class="pct">${gT?pct(v/gT,0):''}</span></span></div>`).join('')||'<p class="muted">Sin gastos.</p>'}</div></div>
       <div><div class="muted" style="font-size:12.5px;margin-bottom:4px">Mayores gastos</div><table><tbody>${top.map(g=>`<tr><td class="num muted">${fmtFecha(g.fecha)}</td><td style="max-width:220px;overflow:hidden;text-overflow:ellipsis">${esc(g.concepto)}</td><td class="r num"><b>${eur2.format(-g.importe)}</b></td></tr>`).join('')}</tbody></table></div></div>
+    ${sinConf.length?`<div class="hint" style="margin:12px 0 0"><b>⚠️ ${sinConf.length} pago(s) de Apple Pay sin confirmar por el extracto</b> (${eur2.format(-sinConf.reduce((a,g)=>a+g.importe,0))}). Pueden ser devoluciones, cargos en otra divisa con importe distinto o pagos rechazados; revísalos o bórralos si no son reales.<table style="margin-top:6px"><tbody>${sinConf.slice(0,15).map(g=>`<tr><td class="num muted">${fmtFecha(g.fecha)}</td><td style="max-width:240px;overflow:hidden;text-overflow:ellipsis">${esc(g.concepto)}</td><td class="muted">${esc(g.tarjeta||'')}</td><td class="r num">${eur2.format(-g.importe)}</td></tr>`).join('')}</tbody></table>${sinConf.length>15?`<span class="muted" style="font-size:12px">…y ${sinConf.length-15} más</span>`:''}</div>`:''}
     ${sin?`<div class="hint" style="margin:12px 0 0;display:flex;gap:10px;align-items:center;flex-wrap:wrap">⚠️ <span><b>${sin}</b> movimiento(s) sin categoría. Al categorizar uno, la app aprende y aplica la regla a los parecidos.</span><button class="btn sm primary" id="repSin">Revisarlos</button></div>`:`<p class="up" style="margin:12px 0 0">✓ Todo categorizado automáticamente.</p>`}`;
   el.classList.remove('hidden');
   $('#repClose').onclick=()=>{ informe=null; el.classList.add('hidden'); };
