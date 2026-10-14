@@ -1665,6 +1665,41 @@ async function apSync(interactive){
     await apProcess(await (await apHandle.getFile()).text(), interactive);
   }catch(e){ if(interactive) alert('No se pudo leer el archivo de Apple Pay: '+e.message+'\nVuelve a elegirlo en "Configurar Apple Pay".'); }
 }
+// Pago rechazado y repetido con otra tarjeta: el Atajo apunta los dos intentos (mismo comercio e importe, minutos de diferencia, tarjetas distintas).
+// Solo cuenta el que el banco confirmó o, si ninguno lo está, el último; el otro se descarta y no vuelve en la siguiente sincronización.
+function descartarReintentos(){
+  const min=g=>g.hora && !g.fechaAprox ? toDate(g.fecha).getTime()/6e4+(+g.hora.slice(0,2))*60+(+g.hora.slice(3,5)) : null;
+  const ap=D.gastos.filter(g=>g.origen==='Apple Pay' && g.tarjeta && min(g)!=null).sort((a,b)=>min(a)-min(b));
+  const fuera=new Set();
+  for(let i=0;i<ap.length;i++){
+    const a=ap[i]; if(fuera.has(a)) continue;
+    for(let j=i+1;j<ap.length && min(ap[j])-min(a)<=10;j++){
+      const b=ap[j];
+      if(fuera.has(b) || Math.abs(a.importe-b.importe)>0.005 || norm(a.tarjeta)===norm(b.tarjeta) || norm(a.concepto)!==norm(b.concepto)) continue;
+      if(a.conc && b.conc) continue;   // el banco cobró los dos: son pagos distintos
+      fuera.add(a.conc?b:a); break;
+    }
+  }
+  // Sin hora (el Atajo no apuntó la fecha) solo hay evidencia si el banco cobró uno de los dos y el otro no
+  const aprox=D.gastos.filter(g=>g.origen==='Apple Pay' && g.tarjeta && g.fechaAprox && !fuera.has(g));
+  for(const a of aprox) if(!a.conc && aprox.some(b=>b.conc && b.fecha===a.fecha && Math.abs(a.importe-b.importe)<0.005 && norm(a.tarjeta)!==norm(b.tarjeta) && norm(a.concepto)===norm(b.concepto))) fuera.add(a);
+  if(!fuera.size) return 0;
+  D.gastos=D.gastos.filter(g=>!fuera.has(g)); fuera.forEach(g=>D.gastosIgnorados.push(g.hash));
+  return fuera.size;
+}
+// Pago de Apple Pay con la tarjeta de un banco conectado por Open Banking que el banco nunca cobró: fue rechazado.
+// Hay evidencia si la descarga del banco cubre desde antes del pago hasta 5 días después (lo que tarda en apuntar el cargo) y ningún cargo encaja.
+// cob: {idCuenta: {desde, hasta}}; usados: pagos que se van a enlazar en esta misma sincronización
+function descartarNoCobrados(cob,usados){
+  const fuera=D.gastos.filter(g=>{
+    if(g.origen!=='Apple Pay' || g.conc || usados.has(g.id)) return false;
+    const c=cob[cuentaDeTarjeta(g.tarjeta)]; if(!c) return false;
+    const t=toDate(g.fecha).getTime();
+    return (t-toDate(c.desde).getTime())/864e5>=(g.fechaAprox?10:1) && (toDate(c.hasta).getTime()-t)/864e5>=5;
+  });
+  D.gastos=D.gastos.filter(g=>!fuera.includes(g)); fuera.forEach(g=>D.gastosIgnorados.push(g.hash));
+  return fuera.length;
+}
 async function apProcess(txt,interactive){
   const vistos=new Set([...D.gastos.map(g=>g.hash),...D.gastosIgnorados]);
   const usados=new Set(); let n=0, dup=0, err=0, sinFecha=0;
@@ -1690,9 +1725,10 @@ async function apProcess(txt,interactive){
     autoCat(g); D.gastos.push(g); vistos.add(h); n++;
     if(!gMes || g.fecha.slice(0,7)>gMes) gMes=g.fecha.slice(0,7);
   }
+  const rein=descartarReintentos(); n=Math.max(0,n-rein);
   D.apSync=new Date().toLocaleString('es-ES',{dateStyle:'short',timeStyle:'short'});
   await save();
-  if(interactive || n) toast((n?`${n} pago(s) nuevo(s) de Apple Pay`:'Apple Pay: no hay pagos nuevos')+(dup?` · ${dup} ya estaban en el banco`:'')+(err?` · ${err} línea(s) no válidas`:''));
+  if(interactive || n || rein) toast((n?`${n} pago(s) nuevo(s) de Apple Pay`:'Apple Pay: no hay pagos nuevos')+(dup?` · ${dup} ya estaban en el banco`:'')+(rein?` · ${rein} intento(s) rechazado(s) y repetido(s) con otra tarjeta descartado(s)`:'')+(err?` · ${err} línea(s) no válidas`:''));
   if(sinFecha) setTimeout(()=>alert(`${sinFecha} pago(s) de Apple Pay llegaron SIN FECHA y se han guardado con la fecha de hoy (puedes corregirla borrándolo y añadiéndolo a mano).
 
 Revisa el Atajo: en «Formatear fecha», el formato debe ser «Personalizado» con yyyy-MM-dd HH:mm, y en el bloque Texto el primer campo debe ser la variable azul «Fecha formateada».`),300);
@@ -1751,7 +1787,20 @@ async function bkSync(interactivo=true){
     const ps=D.saldosBanco[id]; if(ps && (ps.fecha>fSaldo || (ps.fecha===fSaldo && ps.saldo===datos.saldos[ks[0]]))) continue;
     saldos.push({id,prev:ps||null,nuevo:{fecha:fSaldo,saldo:datos.saldos[ks[0]],origen:banco}});
   }
-  if(!res.length && !saldos.length){ if(interactivo) toast('Bancos: no hay movimientos nuevos'+(datos.generado?` (archivo del ${datos.generado.slice(0,10)})`:'')); return; }
+  // Periodo que cubre la descarga de cada cuenta (sin las de bancos que dieron error)
+  const cob={}, errs=(datos.errores||[]).join(' '), fGen=(datos.generado||'').slice(0,10);
+  for(const m of (datos.movimientos||[])){
+    const id=adivinarCuentaPat(m.banco), f=parseFecha(m.fecha); if(!id || !f || !fGen || errs.includes(m.banco)) continue;
+    const c=cob[id]||(cob[id]={desde:f.fecha,hasta:fGen}); if(f.fecha<c.desde) c.desde=f.fecha;
+  }
+  let desc=descartarNoCobrados(cob,usados);
+  const txtDesc=()=>desc?` · ${desc} pago(s) de Apple Pay que el banco no cobró (rechazados) descartado(s)`:'';
+  if(!res.length && !saldos.length){
+    desc+=descartarReintentos();
+    if(desc){ await save(); renderGastos(); toast('Bancos: no hay movimientos nuevos'+txtDesc()); }
+    else if(interactivo) toast('Bancos: no hay movimientos nuevos'+(datos.generado?` (archivo del ${datos.generado.slice(0,10)})`:''));
+    return;
+  }
   if(nuevos.length && interactivo){
     const gasto=nuevos.filter(r=>r.importe<0).reduce((a,r)=>a-r.importe,0), ing=nuevos.filter(r=>r.importe>0).reduce((a,r)=>a+r.importe,0);
     const bancos=[...new Set(nuevos.map(r=>r.banco))].join(', ');
@@ -1765,12 +1814,13 @@ async function bkSync(interactivo=true){
     else { D.gastosIgnorados.push(r.hash); lote.hashes.push(r.hash); }
   }
   lote.n=n;
+  desc+=descartarReintentos();   // ahora que el banco ha confirmado pagos, se ve qué intentos con otra tarjeta fueron rechazados
   const tr=emparejarTraspasos(); if(tr) toast(`${tr} movimiento(s) detectados como traspaso entre tus cuentas`);
   for(const s of saldos) D.saldosBanco[s.id]=s.nuevo;
   if(n || lote.conc.length || saldos.length){ D.importaciones=[lote,...(D.importaciones||[])].slice(0,40); }
   if(res.length) gMes=res.map(r=>r.fecha).sort().at(-1).slice(0,7);
   await save(); renderGastos();
-  if(n || interactivo) toast(`Bancos: ${n} movimiento(s) nuevo(s)`+(ap?` · ${ap} enlazados con Apple Pay`:'')+(rep?` · ${rep} ya estaban`:''));
+  if(n || desc || interactivo) toast(`Bancos: ${n} movimiento(s) nuevo(s)`+(ap?` · ${ap} enlazados con Apple Pay`:'')+(rep?` · ${rep} ya estaban`:'')+txtDesc());
 }
 
 // Al abrir la app (y al entrar en Gastos) se importan solos los movimientos nuevos, como mucho una vez cada 20 min y sin preguntar
