@@ -530,6 +530,7 @@ nav .ti{display:none}nav .s{display:none}
           <button class="btn" id="autoBtn">Conectar saldos automáticos</button>
         </div>
         <p class="muted" id="autoInfo" style="font-size:12.5px;margin:10px 0 0"></p>
+        <p class="muted" id="verInfo" style="font-size:12px;margin:10px 0 0"></p>
         <label class="field" style="flex-direction:row;align-items:center;gap:6px;margin-top:10px">Inflación esperada %<input id="inflPct" inputmode="decimal" style="width:60px"></label>
       </div>
       <div class="card" style="margin-top:14px" id="segCard">
@@ -589,6 +590,8 @@ const fmtMesL = m => { const [y,mo]=m.split('-'); return MESESL[+mo-1]+' '+y; };
 const fmtFecha = f => { const [y,m,d]=f.split('-'); return `${+d} ${MESES[+m-1]} ${y}`; };
 const toDate = f => new Date(f+'T12:00:00');
 const hoy = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
+// La pone automatico/publicar_web.py al publicar; en local es 'dev'
+const VERSION='f076ca50';
 function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('show'),2600); }
 const uid = p => p+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 
@@ -3463,6 +3466,22 @@ applyTheme();
 boot().catch(e=>console.error(e)).finally(()=>$('#splash').classList.add('off'));
 setTimeout(()=>$('#splash').classList.add('off'),8000);
 if('serviceWorker' in navigator && location.protocol==='https:') navigator.serviceWorker.register('sw.js').catch(()=>{});
+$('#verInfo').textContent='Versión de la app: '+(VERSION==='dev'?'local (sin publicar)':VERSION);
+// En el iPhone la app instalada puede seguir con una copia antigua: al abrirla o volver a ella se mira si hay otra versión publicada y se recarga
+async function buscarVersion(){
+  if(VERSION==='dev' || location.protocol!=='https:' || !navigator.onLine) return;
+  try{
+    const txt=await fetch('./?v='+Date.now(),{cache:'no-store'}).then(r=>r.ok?r.text():'');
+    const nueva=(txt.match(/const VERSION='([^']+)'/)||[])[1];
+    if(!nueva || nueva===VERSION || current==='cierre' || document.querySelector('.dlg')) return;
+    if(sessionStorage.getItem('recargadaPara')===nueva) return;   // ya se intentó: no entrar en bucle
+    sessionStorage.setItem('recargadaPara',nueva);
+    navigator.serviceWorker?.getRegistration().then(r=>r&&r.update()).catch(()=>{});
+    toast('Hay una versión nueva de la app. Actualizando…'); setTimeout(()=>location.reload(),800);
+  }catch(e){}
+}
+setTimeout(buscarVersion,1500);
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden) buscarVersion(); });
 // En iPhone/iPad el teclado numérico no tiene «+», «-» ni «=»: se usa el de texto para poder escribir sumas y negativos
 if(/iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1)){
   const fix=r=>r.querySelectorAll?.('input[inputmode="decimal"]').forEach(i=>i.setAttribute('inputmode','text'));
