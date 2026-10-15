@@ -372,6 +372,14 @@ nav .ti{display:none}nav .s{display:none}
 
       <div class="grid kpis" id="gKpis"></div>
       <div class="grid two" style="margin-bottom:14px">
+        <div class="card" id="gFlujoCard">
+          <div class="cardhead"><h2 id="gFlujoTitle">Flujo del dinero</h2><span class="muted" style="font-size:12px">pulsa un gasto para ver sus movimientos</span></div>
+          <p class="muted" id="gFlujoNote" style="font-size:12.5px;margin:0 0 6px"></p>
+          <div class="chart" id="gFlujo"></div>
+        </div>
+        <div class="card" id="gRitmo"></div>
+      </div>
+      <div class="grid two" style="margin-bottom:14px">
         <div class="card">
           <div class="cardhead"><h2>Gasto por categoría</h2><button class="btn sm" id="gPresBtn" title="Fija cuánto quieres gastar al mes en cada categoría">Presupuestos</button></div>
           <div class="bars" id="gCats"></div>
@@ -1244,6 +1252,83 @@ function donutChart(host,items,{centro='',sub='',sel=null,onPick}={}){
   if(onPick) host.querySelectorAll('[data-id]').forEach(e=>e.onclick=()=>{ if(e.dataset.id!=='__otras') onPick(e.dataset.id); });
 }
 
+/* Flujo del dinero (Sankey): entradas a la izquierda, un nodo central y salidas a la derecha. Nodos: [{id,name,sub,v,color,pick}] */
+function sankeyChart(host,{izq,der,onPick}){
+  host.innerHTML='';
+  const T=Math.max(izq.reduce((a,n)=>a+n.v,0),der.reduce((a,n)=>a+n.v,0));
+  if(!T){ host.innerHTML='<p class="muted">Sin movimientos en este periodo.</p>'; return; }
+  const W=Math.max(280,host.clientWidth), estrecho=W<520;
+  const lw=Math.min(130,W*.26), rw=Math.min(180,W*.34), nw=estrecho?10:14, cw=estrecho?10:14;
+  const xL=lw, xR=W-rw-nw, xC=(xL+nw+xR-cw)/2;
+  // cada nodo ocupa al menos MIN px de alto para que sus dos líneas de texto no se pisen
+  const k=(estrecho?230:270)/T, MIN=36, slot=n=>Math.max(n.v*k+8,MIN);
+  const hL=izq.reduce((a,n)=>a+slot(n),0), hR=der.reduce((a,n)=>a+slot(n),0), H=Math.max(hL,hR,T*k+16);
+  const lay=ns=>{ let y=(H-ns.reduce((a,n)=>a+slot(n),0))/2; return ns.map(n=>{ const s=slot(n), h=Math.max(2,n.v*k), o={...n,y:y+(s-h)/2,h}; y+=s; return o; }); };
+  const L=lay(izq), R=lay(der), cy=(H-T*k)/2;
+  const svg=svgEl('svg',{viewBox:`0 0 ${W} ${H}`,height:H,role:'img','aria-label':'Flujo del dinero: de dónde entra y en qué se va'},host);
+  const gl=svgEl('g',{},svg), gn=svgEl('g',{},svg);
+  const cinta=(x1,y1,x2,y2,h)=>{ const xm=(x1+x2)/2; return `M${x1},${y1}C${xm},${y1} ${xm},${y2} ${x2},${y2}V${y2+h}C${xm},${y2+h} ${xm},${y1+h} ${x1},${y1+h}Z`; };
+  const els=[];
+  const nodo=(n,lado,off)=>{
+    const h=n.v*k, x=lado<0?xL:xR;
+    const c=svgEl('path',{d:lado<0?cinta(xL+nw,n.y,xC,off,h):cinta(xC+cw,off,xR,n.y,h),fill:n.color,'fill-opacity':.25},gl);
+    const g=svgEl('g',{style:n.pick&&onPick?'cursor:pointer':''},gn);
+    svgEl('rect',{x,y:n.y,width:nw,height:n.h,rx:Math.min(3,n.h/2),fill:n.color},g);
+    const tx=lado<0?xL-8:xR+nw+8, ym=n.y+n.h/2, anc=lado<0?'end':'start', max=Math.floor((lado<0?lw:rw)/7.2);
+    const t1=svgEl('text',{x:tx,y:ym-2,'text-anchor':anc,'font-size':estrecho?12:13,'font-weight':560,fill:css('--text')},g); t1.textContent=n.name.length>max?n.name.slice(0,max-1)+'…':n.name;
+    const t2=svgEl('text',{x:tx,y:ym+13,'text-anchor':anc,class:'num','font-size':estrecho?11:11.5,fill:css('--muted')},g); t2.textContent=n.sub;
+    // la zona sensible cubre el nodo y su texto
+    svgEl('rect',{x:lado<0?0:xR,y:n.y+n.h/2-18,width:lado<0?xL+nw:W-xR,height:36,fill:'transparent'},g);
+    const e={c,g}; els.push(e);
+    const on=v=>els.forEach(o=>{ o.c.setAttribute('fill-opacity',v&&o!==e?.08:v?.5:.25); o.g.style.opacity=v&&o!==e?.45:1; });
+    [c,g].forEach(el=>{ el.addEventListener('pointerenter',()=>on(true)); el.addEventListener('pointerleave',()=>on(false)); });
+    if(n.pick&&onPick){ c.style.cursor='pointer'; [c,g].forEach(el=>el.addEventListener('click',()=>onPick(n.pick))); }
+    return off+h;
+  };
+  let off=cy; L.forEach(n=>off=nodo(n,-1,off));
+  off=cy; R.forEach(n=>off=nodo(n,1,off));
+  svgEl('rect',{x:xC,y:cy,width:cw,height:T*k,rx:3,fill:css('--text-2')},gn);
+}
+/* Gasto acumulado día a día: este mes (y su previsión), tu media y el mes anterior. d = ritmoMes() */
+function ritmoChart(host,d){
+  host.innerHTML='';
+  const {dias,este,media,prev,corte,prevision}=d;
+  const W=Math.max(280,host.clientWidth), H=230, m={t:12,r:14,b:24,l:46}, iw=W-m.l-m.r, ih=H-m.t-m.b;
+  const svg=svgEl('svg',{viewBox:`0 0 ${W} ${H}`,height:H,role:'img','aria-label':'Gasto acumulado del mes frente a tu media'},host);
+  const tip=document.createElement('div'); tip.className='tip'; host.appendChild(tip);
+  const todos=[...este.slice(0,corte),...media,...(prev||[]),...(prevision||[]).filter(v=>v!=null)];
+  const ticks=niceTicks(0,Math.max(1,...todos)), y1=ticks.at(-1);
+  const X=i=>m.l+(dias>1?i/(dias-1)*iw:iw/2), Y=v=>m.t+ih-v/y1*ih;
+  const g=svgEl('g',{},svg);
+  ticks.forEach(t=>{ svgEl('line',{x1:m.l,x2:m.l+iw,y1:Y(t),y2:Y(t),stroke:t===0?css('--muted'):css('--grid')},g); svgEl('text',{x:m.l-8,y:Y(t)+4,'text-anchor':'end',class:'ax num'},g).textContent=kfmt(t); });
+  [1,8,15,22,dias].forEach(dd=>svgEl('text',{x:X(dd-1),y:H-6,'text-anchor':'middle',class:'ax num'},g).textContent=dd);
+  const linea=(vals,desde,hasta,at)=>{ let p=''; for(let i=desde;i<hasta;i++) if(vals[i]!=null) p+=(p?'L':'M')+X(i).toFixed(1)+','+Y(vals[i]).toFixed(1); return svgEl('path',{d:p,fill:'none','stroke-linejoin':'round','stroke-linecap':'round',...at},svg); };
+  const naranja=css('--s2');
+  if(corte<dias) svgEl('line',{x1:X(corte-1),x2:X(corte-1),y1:m.t,y2:m.t+ih,stroke:css('--border'),'stroke-width':1.5},g);
+  if(prev) linea(prev,0,dias,{stroke:css('--muted'),'stroke-opacity':.55,'stroke-width':2});
+  linea(media,0,dias,{stroke:css('--text-2'),'stroke-width':2,'stroke-dasharray':'5 4'});
+  // área y línea de este mes hasta el último día con datos
+  let a=`M${X(0)},${Y(0)}`; for(let i=0;i<corte;i++) a+=`L${X(i).toFixed(1)},${Y(este[i]).toFixed(1)}`; a+=`L${X(corte-1)},${Y(0)}Z`;
+  svgEl('path',{d:a,fill:naranja,'fill-opacity':.12},svg);
+  if(prevision) linea(prevision,corte-1,dias,{stroke:naranja,'stroke-width':2,'stroke-dasharray':'3 4'});
+  linea(este,0,corte,{stroke:naranja,'stroke-width':2.5});
+  svgEl('circle',{cx:X(corte-1),cy:Y(este[corte-1]),r:4.5,fill:naranja,stroke:css('--surface'),'stroke-width':2},svg);
+  if(prevision) svgEl('circle',{cx:X(dias-1),cy:Y(prevision[dias-1]),r:4,fill:css('--surface'),stroke:naranja,'stroke-width':2},svg);
+  // interacción
+  const cross=svgEl('line',{y1:m.t,y2:m.t+ih,stroke:css('--muted'),'stroke-dasharray':'3 3',visibility:'hidden'},svg);
+  const hit=svgEl('rect',{x:m.l,y:m.t,width:iw,height:ih,fill:'transparent'},svg);
+  const fila=(col,nom,v,dash)=>v==null?'':`<div class="r"><span><i style="background:${col};${dash?'opacity:.6':''}"></i>${nom}</span><b class="num">${eur.format(v)}</b></div>`;
+  const move=ev=>{
+    const rc=svg.getBoundingClientRect(), px=(ev.clientX-rc.left)*W/rc.width, i=Math.max(0,Math.min(dias-1,Math.round((px-m.l)/iw*(dias-1))));
+    cross.setAttribute('x1',X(i)); cross.setAttribute('x2',X(i)); cross.setAttribute('visibility','visible');
+    tip.innerHTML=`<div class="t">Día ${i+1}</div>`+(i<corte?fila(naranja,'Este mes',este[i]):fila(naranja,'Previsión',prevision?.[i],1))+fila(css('--text-2'),`Tu media (${d.n} ${d.n===1?'mes':'meses'})`,media[i])+(prev?fila(css('--muted'),'Mes anterior',prev[i]):'');
+    tip.style.display='block'; const tw=tip.offsetWidth, sx=X(i)*rc.width/W;
+    tip.style.left=Math.min(Math.max(0,sx+(sx+tw+16>rc.width?-tw-12:12)),rc.width-tw)+'px'; tip.style.top='6px';
+  };
+  hit.addEventListener('pointermove',move); hit.addEventListener('pointerdown',move);
+  hit.addEventListener('pointerleave',()=>{ tip.style.display='none'; cross.setAttribute('visibility','hidden'); });
+}
+
 /* ============ Vistas ============ */
 let rango = +(ls.get('rango')??0);
 let conPP = ls.get('conPP')!=='0';
@@ -2054,6 +2139,65 @@ function renderBizum(R,anual,etiqueta,meses){
     await save(); renderGastos(); toast(`${n} Bizum recibido(s) recategorizados`);
   };
 }
+// Flujo del periodo: ingresos por categoría (+ lo sacado del saldo) → gastos por categoría (+ lo ahorrado)
+function flujoDe(R){
+  const ing={}; let internos=0;
+  for(const g of R.gs){ const t=g.cat?catTipo(g.cat):(g.importe<0?'gasto':'ingreso'); if(t==='ingreso'){ const k=g.cat||''; ing[k]=(ing[k]||0)+efectivo(g); } else if(t==='interno') internos++; }
+  const cols=['--s2','--s4','--s5','--s7','--s6','--s8'];
+  const izq=Object.entries(ing).filter(([,v])=>v>=0.5).sort((a,b)=>b[1]-a[1]).map(([id,v])=>({id:'i'+id,name:id?catNombre(id):'Otros ingresos',v,color:css('--s1')}));
+  const gs=Object.entries(R.porCat).filter(([,v])=>v>=0.5).sort((a,b)=>b[1]-a[1]);
+  const der=gs.slice(0,6).map(([id,v],k)=>({id:'g'+id,pick:id||'__sin',name:id?catNombre(id):'Sin categoría',v,color:css(cols[k])}));
+  if(gs.length>6) der.push({id:'gotras',name:`Otras (${gs.length-6})`,v:gs.slice(6).reduce((a,[,v])=>a+v,0),color:css('--muted')});
+  const tI=izq.reduce((a,n)=>a+n.v,0), tG=der.reduce((a,n)=>a+n.v,0), T=Math.max(tI,tG);
+  if(tG-tI>=0.5) izq.push({id:'saldo',name:'Del saldo',v:tG-tI,color:css('--muted')});
+  if(tI-tG>=0.5) der.push({id:'ahorro',name:'Ahorro',v:tI-tG,color:css('--s3')});
+  izq.forEach(n=>n.sub=eur.format(n.v)); der.forEach(n=>n.sub=`${eur.format(n.v)} · ${pct(n.v/T,0)}`);
+  return {izq,der,tI,tG,internos};
+}
+// Gasto acumulado por día del mes m (índice 0 = día 1), en una rejilla de «dias» días
+function acumuladoMes(m,dias){
+  const d=new Array(dias).fill(0);
+  resumenMes(m).gs.forEach(g=>{ const v=gastoDe(g); if(v) d[Math.min(dias,+g.fecha.slice(8,10))-1]+=v; });
+  for(let i=1;i<dias;i++) d[i]+=d[i-1];
+  return d;
+}
+// Cómo va el mes m frente a la media de los 3 meses completos anteriores; si es el mes en curso, con previsión de cierre
+function ritmoMes(m){
+  const act=hoy().slice(0,7); if(m>act) return null;
+  const ms=mesesCompletosGasto(3,m); if(!ms.length) return null;
+  const dias=new Date(+m.slice(0,4),+m.slice(5,7),0).getDate(), enCurso=m===act;
+  const media=new Array(dias).fill(0); ms.forEach(x=>acumuladoMes(x.m,dias).forEach((v,i)=>media[i]+=v/ms.length));
+  const mp=mesMas(m,-1), prev=resumenMes(mp).gs.length?acumuladoMes(mp,dias):null, este=acumuladoMes(m,dias);
+  let corte=dias, prevision=null, previsto=este[dias-1];
+  if(enCurso){
+    // hasta el último día con movimientos (como en Previsión), y la previsión acaba en el mismo importe que allí
+    const pm=previsionMes(); corte=Math.max(1,Math.min(dias,pm&&pm.corte?pm.corte:+hoy().slice(8,10)));
+    const ya=este[corte-1], resto=media[dias-1]-media[corte-1];
+    previsto=pm?Math.max(ya,pm.previsto):ya+resto;
+    prevision=media.map((v,i)=>i<corte-1?null:ya+(previsto-ya)*(resto>0?(v-media[corte-1])/resto:(i-corte+1)/Math.max(1,dias-corte)));
+  }
+  // categorías que van muy por encima de lo habitual a estas alturas del mes
+  const habitual={}; ms.forEach(x=>x.r.gs.forEach(g=>{ if(+g.fecha.slice(8,10)<=corte){ const v=gastoDe(g); if(v) habitual[g.cat||'']=(habitual[g.cat||'']||0)+v/ms.length; } }));
+  const ya={}; resumenMes(m).gs.forEach(g=>{ if(+g.fecha.slice(8,10)<=corte){ const v=gastoDe(g); if(v) ya[g.cat||'']=(ya[g.cat||'']||0)+v; } });
+  const avisos=Object.entries(ya).map(([c,v])=>({c,v,h:habitual[c]||0})).filter(o=>o.v-o.h>=15 && o.v>o.h*1.5).sort((a,b)=>(b.v-b.h)-(a.v-a.h)).slice(0,3);
+  return {m,dias,enCurso,corte,este,media,prev,prevision,previsto,n:ms.length,dif:este[corte-1]-media[corte-1],avisos};
+}
+function ritmoLeyenda(d){
+  const dash=c=>`<span><i class="line" style="background:repeating-linear-gradient(90deg,${c} 0 4px,transparent 4px 7px)"></i>`;
+  return `<div class="legend"><span><i class="line" style="background:var(--s2)"></i>${d.enCurso?'Este mes':MESESL[+d.m.slice(5,7)-1]}</span>${d.prevision?dash('var(--s2)')+'Previsión</span>':''}${dash('var(--text-2)')}Tu media (${d.n} ${d.n===1?'mes':'meses'})</span>${d.prev?'<span><i class="line" style="background:var(--muted);opacity:.55"></i>Mes anterior</span>':''}</div>`;
+}
+function ritmoHTML(d){
+  const nomMes=MESESL[+d.m.slice(5,7)-1], pos=d.dif<=0, col=pos?'var(--pos)':'var(--neg)';
+  const badge=Math.abs(d.dif)<1?'<span class="pill">En línea con tu media</span>':`<span class="pill num" style="color:${col};background:color-mix(in srgb,${col} 13%,transparent);font-weight:600">${pos?'▼':'▲'} ${eur2.format(Math.abs(d.dif))} ${pos?'por debajo':'por encima'} de tu media</span>`;
+  const mediaFin=d.media[d.dias-1];
+  const resumen=d.enCurso
+    ? `Llevas <b class="num">${eur.format(d.este[d.corte-1])}</b> hasta el día ${d.corte}; a estas alturas sueles llevar ${eur.format(d.media[d.corte-1])}. Si sigues tu ritmo habitual acabarás ${nomMes} en <b class="num">${eur.format(d.previsto)}</b> <span class="${d.previsto>mediaFin?'down':'up'}">(${sgn(d.previsto-mediaFin)} frente a tu media de ${eur.format(mediaFin)})</span>.`
+    : `Gastaste <b class="num">${eur.format(d.previsto)}</b> en ${nomMes}, <span class="${d.previsto>mediaFin?'down':'up'}">${sgn(d.previsto-mediaFin)}</span> frente a tu media de ${eur.format(mediaFin)}.`;
+  const av=d.avisos.length?`<div style="margin-top:10px;display:grid;gap:6px">${d.avisos.map(o=>`<div style="display:flex;gap:8px;align-items:flex-start;font-size:13px"><span aria-hidden="true">📈</span><span><b>${esc(o.c?catNombre(o.c):'Sin categoría')}</b>: ${o.h>=1?`${pct(o.v/o.h-1,0)} más de lo habitual`:'casi no sueles gastar aquí'}. <span class="muted">Llevas ${eur2.format(o.v)}${d.enCurso?' a día de hoy':''}${o.h>=1?`; lo normal ${d.enCurso?'a estas alturas':'en un mes'} son ${eur2.format(o.h)}`:''}.</span></span></div>`).join('')}</div>`:'';
+  return `<div class="cardhead"><h2>${d.enCurso?'¿Cómo vas este mes?':'¿Cómo fue '+nomMes+'?'}</h2>${badge}</div>
+    <p class="muted" style="font-size:12.5px;margin:0 0 8px">Gasto acumulado día a día, comparado con tu ritmo habitual.</p>${ritmoLeyenda(d)}<div class="chart" data-ritmo></div>
+    <p style="margin:10px 0 0;font-size:13.5px">${resumen}</p>${av}`;
+}
 function renderGastos(){
   if(!D) return;
   const hayDatos=D.gastos.length>0;
@@ -2102,6 +2246,15 @@ function renderGastos(){
   if(idx>=0 && current==='gastos'){ const ms=meses.slice(idx); timeChart($('#gChart'),{x:ms.map(m=>m+'-15'),series:[{name:'Gasto',color:css('--s1'),colorNeg:css('--s3'),vals:serieM.slice(idx)}],mode:'bar',labels:ms.map(fmtMesL),height:230}); }
   else if(idx<0) $('#gChart').innerHTML='<p class="muted">Sin datos todavía.</p>';
   if(current==='gastos'){
+    // flujo del dinero del periodo
+    const F=flujoDe(R);
+    $('#gFlujoTitle').textContent=anual?'Flujo del dinero en '+clave:'Flujo del dinero · '+fmtMesL(gMes);
+    $('#gFlujoNote').textContent=(F.internos?`No cuentan ${F.internos} movimiento(s) entre tus cuentas. `:'Sin transferencias entre tus cuentas. ')+(F.tI&&F.tG>F.tI?`Has gastado ${eur.format(F.tG-F.tI)} más de lo que ha entrado.`:F.tI?`Te queda el ${pct((F.tI-F.tG)/F.tI,0)} de lo que ha entrado.`:'');
+    sankeyChart($('#gFlujo'),{izq:F.izq,der:F.der,onPick:id=>{ gFiltro=gFiltro===id?'':id; gDetEn='cats'; renderGastos(); $('#gCats').scrollIntoView({behavior:'smooth',block:'nearest'}); }});
+    // cómo va el mes frente a lo habitual (solo en vista mensual)
+    const rt=anual?null:ritmoMes(gMes);
+    $('#gRitmo').classList.toggle('hidden',!rt); $('#gFlujoCard').style.gridColumn=rt?'':'1/-1';
+    if(rt){ $('#gRitmo').innerHTML=ritmoHTML(rt); ritmoChart($('#gRitmo [data-ritmo]'),rt); }
     // rosco por categoría
     const cols=['--s1','--s2','--s3','--s4','--s5','--s7','--s8','--s6'];
     const ord=Object.entries(R.porCat).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]);
@@ -3182,8 +3335,8 @@ function ventanaPrevision(S,V,hastaFecha){
   return W.map(s=>({f:s.r.fecha,v:V(s)}));
 }
 // Meses completos de gastos (con extracto del banco: hay ingresos), sin el mes en curso
-function mesesCompletosGasto(n=12){
-  const act=hoy().slice(0,7), ms=[];
+function mesesCompletosGasto(n=12,act=hoy().slice(0,7)){
+  const ms=[];
   for(let k=1;k<=24 && ms.length<n;k++){ const m=mesMas(act,-k), r=resumenMes(m); if(r.gs.length && r.ingreso>0 && r.gs.some(g=>g.origen!=='Apple Pay')) ms.push({m,r}); }
   return ms;
 }
@@ -3282,6 +3435,9 @@ function renderPrevGastos(pm){
     <tr><td>Ingresos</td><td class="r num up">${eur.format(mediaIng)}</td><td class="r num muted">${eur.format(r.ingreso)}</td><td class="r num up">${eur.format(mediaIng*meses)}</td></tr>
     <tr class="tot"><td>Ahorro</td><td class="r num ${cls(mediaIng-tot)}">${sgn(mediaIng-tot)}</td><td></td><td class="r num ${cls(mediaIng-tot)}">${sgn((mediaIng-tot)*meses)}</td></tr></tbody></table></div>
     ${ms.length<3?'<p class="muted" style="font-size:12px;margin:6px 0 0">Con menos de 3 meses completos la previsión es orientativa: un gasto puntual pesa mucho en la media.</p>':''}`;
+  // el mismo gráfico de ritmo que en Gastos, día a día
+  const rt=ritmoMes(act);
+  if(rt){ $('#pvMes').insertAdjacentHTML('beforeend',`<div style="margin-top:14px">${ritmoLeyenda(rt)}<div class="chart" data-ritmo></div></div>`); ritmoChart($('#pvMes [data-ritmo]'),rt); }
 }
 $('#pvPP').onclick=e=>{ const b=e.target.closest('button'); if(!b) return; conPP=b.dataset.pp==='1'; ls.set('conPP',conPP?'1':'0'); renderPrevision(); };
 $('#pvBase').onclick=e=>{ const b=e.target.closest('button'); if(!b) return; pvBase=+b.dataset.b; ls.set('pvBase',pvBase); renderPrevision(); };
