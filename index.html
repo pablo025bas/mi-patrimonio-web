@@ -155,6 +155,7 @@ html.bloq #app,html.bloq #connect{filter:blur(14px);pointer-events:none}
 nav{overflow-x:auto;max-width:100%}
 .monthnav{display:flex;align-items:center;gap:8px}
 .monthnav b{min-width:130px;text-align:center;font-size:15px}
+.monthnav b .rng{display:block;font-size:11.5px;font-weight:400;color:var(--muted);white-space:nowrap}
 .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
 details.card>summary{cursor:pointer;font-weight:620;font-size:15px}
 .steps{padding-left:20px;margin:8px 0}
@@ -417,6 +418,10 @@ nav .ti{display:none}nav .s{display:none}
       </div>
       <div class="card" id="gSubs" style="margin-bottom:14px"></div>
       <details class="card" id="gImps" style="margin-bottom:14px"></details>
+      <details class="card" id="gCiclo" style="margin-bottom:14px">
+        <summary>Mes de nómina a nómina y aviso de cierre</summary>
+        <div id="gCicloBody"></div>
+      </details>
       <details class="card" id="gRules">
         <summary>Reglas, categorías y presupuestos</summary>
         <p class="muted" style="font-size:12.5px">Cada regla asigna una categoría a los movimientos cuyo concepto contiene esa palabra (sin distinguir mayúsculas ni acentos). Se aplica la primera que coincide. Cuando categorizas un movimiento a mano, la app crea la regla sola.</p>
@@ -591,7 +596,7 @@ const fmtFecha = f => { const [y,m,d]=f.split('-'); return `${+d} ${MESES[+m-1]}
 const toDate = f => new Date(f+'T12:00:00');
 const hoy = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
 // La pone automatico/publicar_web.py al publicar; en local es 'dev'
-const VERSION='f076ca50';
+const VERSION='c8f37daa';
 function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('show'),2600); }
 const uid = p => p+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 
@@ -1304,7 +1309,8 @@ function ritmoChart(host,d){
   const X=i=>m.l+(dias>1?i/(dias-1)*iw:iw/2), Y=v=>m.t+ih-v/y1*ih;
   const g=svgEl('g',{},svg);
   ticks.forEach(t=>{ svgEl('line',{x1:m.l,x2:m.l+iw,y1:Y(t),y2:Y(t),stroke:t===0?css('--muted'):css('--grid')},g); svgEl('text',{x:m.l-8,y:Y(t)+4,'text-anchor':'end',class:'ax num'},g).textContent=kfmt(t); });
-  [1,8,15,22,dias].forEach(dd=>svgEl('text',{x:X(dd-1),y:H-6,'text-anchor':'middle',class:'ax num'},g).textContent=dd);
+  const P=d.P, fDia=i=>sumDias(P.desde,i);   // i: índice del día dentro del periodo (0 = primero)
+  [1,8,15,22,dias].forEach((dd,k)=>svgEl('text',{x:X(dd-1),y:H-6,'text-anchor':k===4&&!P.natural?'end':k===0&&!P.natural?'start':'middle',class:'ax num'},g).textContent=P.natural?dd:fmtCorta(fDia(dd-1)));
   const linea=(vals,desde,hasta,at)=>{ let p=''; for(let i=desde;i<hasta;i++) if(vals[i]!=null) p+=(p?'L':'M')+X(i).toFixed(1)+','+Y(vals[i]).toFixed(1); return svgEl('path',{d:p,fill:'none','stroke-linejoin':'round','stroke-linecap':'round',...at},svg); };
   const naranja=css('--s2');
   if(corte<dias) svgEl('line',{x1:X(corte-1),x2:X(corte-1),y1:m.t,y2:m.t+ih,stroke:css('--border'),'stroke-width':1.5},g);
@@ -1324,7 +1330,7 @@ function ritmoChart(host,d){
   const move=ev=>{
     const rc=svg.getBoundingClientRect(), px=(ev.clientX-rc.left)*W/rc.width, i=Math.max(0,Math.min(dias-1,Math.round((px-m.l)/iw*(dias-1))));
     cross.setAttribute('x1',X(i)); cross.setAttribute('x2',X(i)); cross.setAttribute('visibility','visible');
-    tip.innerHTML=`<div class="t">Día ${i+1}</div>`+(i<corte?fila(naranja,'Este mes',este[i]):fila(naranja,'Previsión',prevision?.[i],1))+fila(css('--text-2'),`Tu media (${d.n} ${d.n===1?'mes':'meses'})`,media[i])+(prev?fila(css('--muted'),'Mes anterior',prev[i]):'');
+    tip.innerHTML=`<div class="t">${P.natural?'Día '+(i+1):fmtCorta(fDia(i))+' · día '+(i+1)}</div>`+(i<corte?fila(naranja,'Este mes',este[i]):fila(naranja,'Previsión',prevision?.[i],1))+fila(css('--text-2'),`Tu media (${d.n} ${d.n===1?'mes':'meses'})`,media[i])+(prev?fila(css('--muted'),'Mes anterior',prev[i]):'');
     tip.style.display='block'; const tw=tip.offsetWidth, sx=X(i)*rc.width/W;
     tip.style.left=Math.min(Math.max(0,sx+(sx+tw+16>rc.width?-tw-12:12)),rc.width-tw)+'px'; tip.style.top='6px';
   };
@@ -1811,7 +1817,7 @@ async function apProcess(txt,interactive){
     }
     const g={id:uid('g'),fecha:f.fecha,hora:f.hora,importe,concepto,tarjeta,origen:'Apple Pay',hash:h}; if(fechaAprox) g.fechaAprox=true;
     autoCat(g); D.gastos.push(g); vistos.add(h); n++;
-    if(!gMes || g.fecha.slice(0,7)>gMes) gMes=g.fecha.slice(0,7);
+    if(!gMes || kDe(g.fecha)>gMes) gMes=kDe(g.fecha);
   }
   const rein=descartarReintentos(); n=Math.max(0,n-rein);
   D.apSync=new Date().toLocaleString('es-ES',{dateStyle:'short',timeStyle:'short'});
@@ -1906,9 +1912,11 @@ async function bkSync(interactivo=true){
   const tr=emparejarTraspasos(); if(tr) toast(`${tr} movimiento(s) detectados como traspaso entre tus cuentas`);
   for(const s of saldos) D.saldosBanco[s.id]=s.nuevo;
   if(n || lote.conc.length || saldos.length){ D.importaciones=[lote,...(D.importaciones||[])].slice(0,40); }
-  if(res.length) gMes=res.map(r=>r.fecha).sort().at(-1).slice(0,7);
+  if(res.length) gMes=kDe(res.map(r=>r.fecha).sort().at(-1));
   await save(); renderGastos();
   if(n || desc || interactivo) toast(`Bancos: ${n} movimiento(s) nuevo(s)`+(ap?` · ${ap} enlazados con Apple Pay`:'')+(rep?` · ${rep} ya estaban`:'')+txtDesc());
+  // ¿Ha entrado la nómina con esta descarga? Entonces toca el cierre del mes
+  if(n && cicloCache().nominas.some(g=>g.lote===lote.id) && nominaSinCierre()){ if(current==='resumen') renderResumen(); setTimeout(()=>toast('💶 Ha entrado la nómina: toca hacer el cierre del mes'),2900); }
 }
 
 // Al abrir la app (y al entrar en Gastos) se importan solos los movimientos nuevos, como mucho una vez cada 20 min y sin preguntar
@@ -2042,7 +2050,7 @@ function renderImport(){
     D.perfilesImport[imp.sig]={cuenta:imp.cuenta,map:imp.map,cuentaPat:imp.cuentaPat};
     const us=ultimoSaldo(res); if(us && imp.cuentaPat){ const ps=D.saldosBanco[imp.cuentaPat]; if(!ps || us.fecha>=ps.fecha){ const nuevo={fecha:us.fecha,saldo:us.saldo,origen:imp.cuenta}; lote.saldo={id:imp.cuentaPat,prev:ps||null,nuevo}; D.saldosBanco[imp.cuentaPat]=nuevo; } }
     if(n || lote.conc.length){ D.importaciones=[lote,...(D.importaciones||[])].slice(0,40); informe?.lotes.push(lote.id); }
-    if(res.length) gMes=res.map(r=>r.fecha).sort().at(-1).slice(0,7);
+    if(res.length) gMes=kDe(res.map(r=>r.fecha).sort().at(-1));
     if(informe){ informe.archivos.push({file:imp.file,cuenta:imp.cuenta}); const fs=res.map(r=>r.fecha).sort(); if(fs.length) informe.rangos.push({desde:fs[0],hasta:fs.at(-1),cuentaPat:imp.cuentaPat||null}); }
     imp=null; await save(); renderImport(); renderGastos(); toast(`${n} movimientos importados`); siguienteExtracto();
   };
@@ -2063,8 +2071,72 @@ function reglaReparto(g){
 }
 function parteDe(g){ if(g.parte!=null) return g.parte; const r=reglaReparto(g); return r?r.pct/100:1; }
 const efectivo=g=>Math.round(g.importe*parteDe(g)*100)/100;
+/* ----- Mes de nómina a nómina -----
+   El «mes» de gastos puede ir de nómina a nómina: el mes K (p. ej. octubre) empieza el día que cobras la nómina
+   (si el día habitual es 16-31, la de septiembre; si es 1-15, la de octubre) y acaba el día antes de la siguiente.
+   Si no se encuentra la nómina se usa el día habitual. En modo «natural» es el mes del calendario. */
+const tipoG=g=>g.cat?catTipo(g.cat):(g.importe<0?'gasto':'ingreso');
+const isoDe=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+const sumDias=(f,n)=>{ const d=toDate(f); d.setDate(d.getDate()+n); return isoDe(d); };
+const diasEntre=(a,b)=>Math.round((toDate(b)-toDate(a))/864e5);
+const diasDelMes=m=>new Date(+m.slice(0,4),+m.slice(5,7),0).getDate();
+const fmtCorta=f=>`${+f.slice(8,10)} ${MESES[+f.slice(5,7)-1]}`;
+function cicloCfg(){ const c=D.ajustes.ciclo||{}; return {modo:c.modo==='natural'?'natural':'nomina', dia:Math.min(31,Math.max(1,Math.round(+c.dia)||27)), texto:String(c.texto||'').trim(), min:+c.min>0?+c.min:0}; }
+let _cic={k:null};
+function cicloCache(){
+  const k=D.gastos.length+'|'+(D.actualizado||'')+'|'+JSON.stringify(D.ajustes.ciclo||{});
+  if(_cic.k===k && _cic.D===D) return _cic;
+  const cfg=cicloCfg();
+  // Importe a partir del cual un ingreso grande cuenta como nómina (si no hay texto que la reconozca): 60 % de la mediana del mayor ingreso de cada mes
+  const porMes={}; for(const g of D.gastos){ if(g.importe>0 && tipoG(g)==='ingreso' && !esBizum(g)){ const m=g.fecha.slice(0,7); if(g.importe>(porMes[m]||0)) porMes[m]=g.importe; } }
+  const v=Object.keys(porMes).sort().slice(-12).map(m=>porMes[m]).sort((a,b)=>a-b);
+  const umbral=cfg.min || (v.length?Math.max(400,v[Math.floor(v.length/2)]*0.6):Infinity);
+  const nominas=D.gastos.filter(g=>esNomina(g,cfg,umbral)).sort((a,b)=>a.fecha<b.fecha?-1:a.fecha>b.fecha?1:0);
+  return _cic={k,D,cfg,umbral,nominas,cobros:{},pers:{}};
+}
+function esNomina(g,cfg,umbral){
+  if(!(g.importe>0) || tipoG(g)!=='ingreso' || esBizum(g)) return false;
+  const t=norm(g.concepto+' '+(g.bancoConcepto||''));
+  if(cfg.texto) return t.includes(norm(cfg.texto)) && (!cfg.min || g.importe>=cfg.min);
+  if(/ (nomina|salario|payroll|haberes) /.test(t)) return !cfg.min || g.importe>=cfg.min;
+  return g.importe>=umbral;
+}
+// Día en que empieza el ciclo de la nómina del mes M: la nómina cobrada cerca del día habitual (±9 días) o, si no la hay, el día habitual
+function cobroNomina(M){
+  const C=cicloCache(); if(C.cobros[M]) return C.cobros[M];
+  const nominal=`${M}-${String(Math.min(C.cfg.dia,diasDelMes(M))).padStart(2,'0')}`, a=sumDias(nominal,-9), b=sumDias(nominal,9);
+  const cand=C.nominas.filter(g=>g.fecha>=a && g.fecha<=b);
+  let r={fecha:nominal,g:null};
+  if(cand.length){ const max=Math.max(...cand.map(g=>g.importe)), g=cand.find(g=>g.importe>=max*0.5); r={fecha:g.fecha,g}; }
+  return C.cobros[M]=r;
+}
+// Periodo del mes K: {k, desde, hasta (incluido), dias, ini/fin: nómina que lo abre/cierra (null si es estimado)}
+function per(K){
+  const C=cicloCache(); if(C.pers[K]) return C.pers[K];
+  let P;
+  if(C.cfg.modo==='natural'){ const n=diasDelMes(K); P={k:K,desde:K+'-01',hasta:`${K}-${String(n).padStart(2,'0')}`,dias:n,ini:null,fin:null,natural:true}; }
+  else {
+    const M=C.cfg.dia>15?mesMas(K,-1):K, a=cobroNomina(M), b=cobroNomina(mesMas(M,1)), hasta=sumDias(b.fecha,-1);
+    P={k:K,desde:a.fecha,hasta,dias:diasEntre(a.fecha,hasta)+1,ini:a.g,fin:b.g,natural:false};
+  }
+  return C.pers[K]=P;
+}
+// Mes (K) al que pertenece una fecha, y el mes en curso
+function kDe(f){ const m=f.slice(0,7); if(cicloCfg().modo==='natural') return m; for(const K of [m,mesMas(m,1),mesMas(m,-1)]){ const P=per(K); if(f>=P.desde && f<=P.hasta) return K; } return m; }
+const kHoy=()=>kDe(hoy());
+const diaDe=(f,P)=>diasEntre(P.desde,f)+1;   // 1 = primer día del periodo
+const rangoPer=K=>{ const P=per(K); return P.natural?'':`${fmtCorta(P.desde)} – ${fmtCorta(P.hasta)}`; };
+function rangoClave(m){ if(m.length===7){ const P=per(m); return [P.desde,P.hasta]; } return [per(m+'-01').desde,per(m+'-12').hasta]; }
+// Última nómina cobrada después del último cierre (para avisar de que toca hacerlo)
+function nominaSinCierre(){
+  const g=cicloCache().nominas.at(-1); if(!g || g.fecha<sumDias(hoy(),-40)) return null;
+  const regs=regsOrd(), last=regs.at(-1), mes=+g.fecha.slice(8,10)>=15?g.fecha.slice(0,7):mesMas(g.fecha.slice(0,7),-1);
+  if(last && last.fecha>=g.fecha) return null;
+  if(regs.some(r=>r.mes===mes)) return null;
+  return {g,mes};
+}
 function resumenMes(m){
-  const gs=D.gastos.filter(g=>g.fecha.startsWith(m));
+  const [d0,d1]=rangoClave(m), gs=D.gastos.filter(g=>g.fecha>=d0 && g.fecha<=d1);
   let gasto=0, ingreso=0; const porCat={};
   for(const g of gs){
     const t=g.cat?catTipo(g.cat):(g.importe<0?'gasto':'ingreso');
@@ -2082,10 +2154,9 @@ let gPer='mes', gDetEn='';   // gDetEn: tarjeta donde se despliegan los gastos d
 // Parte transcurrida del periodo (0-1) si es el mes o el año en curso; null si ya pasó o aún no ha empezado
 function fraccionPeriodo(clave,anual){
   const h=hoy();
-  if(clave!==(anual?h.slice(0,4):h.slice(0,7))) return clave<h.slice(0,clave.length)?1:null;
-  const d=new Date(h+'T12:00:00');
-  if(anual){ const ini=new Date(d.getFullYear(),0,1), fin=new Date(d.getFullYear()+1,0,1); return Math.min(1,(d-ini+864e5)/(fin-ini)); }
-  return d.getDate()/new Date(d.getFullYear(),d.getMonth()+1,0).getDate();
+  if(!anual){ const P=per(clave); return h>P.hasta?1:h<P.desde?null:diaDe(h,P)/P.dias; }
+  if(clave!==h.slice(0,4)) return clave<h.slice(0,4)?1:null;
+  const d=toDate(h), ini=new Date(d.getFullYear(),0,1), fin=new Date(d.getFullYear()+1,0,1); return Math.min(1,(d-ini+864e5)/(fin-ini));
 }
 // Desplegable con los gastos de una categoría en el periodo, su presupuesto y cómo vas
 function detalleCat(id,R,anual,clave){
@@ -2099,7 +2170,7 @@ function detalleCat(id,R,anual,clave){
     if(p>0 && f!=null){
       const per=anual?'año':'mes';
       if(f<1){
-        const fin=v/f, dias=Math.max(1,Math.round((1-f)*(anual?365:30.4)));
+        const fin=v/f, dias=Math.max(1,Math.round((1-f)*(anual?365:per(clave).dias)));
         txt = v>p ? `Llevas ${eur.format(v)}: te has pasado en <b class="down">${eur.format(v-p)}</b>.`
           : `Llevas ${eur.format(v)} (${pct(v/p,0)}) y ha pasado el ${pct(f,0)} del ${per}. Te quedan <b>${eur.format(p-v)}</b>, unos ${eur.format((p-v)/dias)} al día.`;
         txt += ` A este ritmo acabarías el ${per} en <b class="${fin>p?'down':'up'}">${eur.format(fin)}</b>.`;
@@ -2123,7 +2194,7 @@ function renderBizum(R,anual,etiqueta,meses){
     : Math.abs(b.neto)<=tol ? `<b>Se compensan</b>: lo que recibes y lo que envías es casi lo mismo (${sgn(b.neto,eur2)}).`
     : b.neto>0 ? `<b>Recibes más de lo que envías</b> (${sgn(b.neto,eur2)}). Suele ser lo que te devuelven por cenas, viajes o compras que pagaste tú.`
     : `<b>Envías más de lo que recibes</b> (${sgn(b.neto,eur2)}).`;
-  const filas=meses.map(m=>({m,b:bizumDe(D.gastos.filter(g=>g.fecha.startsWith(m)))})).filter(o=>o.b.nr+o.b.ne);
+  const filas=meses.map(m=>({m,b:bizumDe(resumenMes(m).gs)})).filter(o=>o.b.nr+o.b.ne);
   const tot=filas.reduce((a,o)=>({rec:a.rec+o.b.rec,env:a.env+o.b.env}),{rec:0,env:0});
   host.innerHTML=`<div class="cardhead"><h2>Bizum: ¿se compensan?</h2><button class="btn sm" id="bzVer">Ver los Bizum en la tabla</button></div>
     <div class="grid kpis" style="margin-bottom:10px">
@@ -2157,33 +2228,34 @@ function flujoDe(R){
   izq.forEach(n=>n.sub=eur.format(n.v)); der.forEach(n=>n.sub=`${eur.format(n.v)} · ${pct(n.v/T,0)}`);
   return {izq,der,tI,tG,internos};
 }
-// Gasto acumulado por día del mes m (índice 0 = día 1), en una rejilla de «dias» días
+// Gasto acumulado por día del mes m (índice 0 = primer día del periodo), en una rejilla de «dias» días
 function acumuladoMes(m,dias){
-  const d=new Array(dias).fill(0);
-  resumenMes(m).gs.forEach(g=>{ const v=gastoDe(g); if(v) d[Math.min(dias,+g.fecha.slice(8,10))-1]+=v; });
+  const d=new Array(dias).fill(0), P=per(m);
+  resumenMes(m).gs.forEach(g=>{ const v=gastoDe(g); if(v) d[Math.max(1,Math.min(dias,diaDe(g.fecha,P)))-1]+=v; });
   for(let i=1;i<dias;i++) d[i]+=d[i-1];
   return d;
 }
 // Cómo va el mes m frente a la media de los 3 meses completos anteriores; si es el mes en curso, con previsión de cierre
 function ritmoMes(m){
-  const act=hoy().slice(0,7); if(m>act) return null;
+  const act=kHoy(); if(m>act) return null;
   const ms=mesesCompletosGasto(3,m); if(!ms.length) return null;
-  const dias=new Date(+m.slice(0,4),+m.slice(5,7),0).getDate(), enCurso=m===act;
+  const P=per(m), dias=P.dias, enCurso=m===act;
   const media=new Array(dias).fill(0); ms.forEach(x=>acumuladoMes(x.m,dias).forEach((v,i)=>media[i]+=v/ms.length));
   const mp=mesMas(m,-1), prev=resumenMes(mp).gs.length?acumuladoMes(mp,dias):null, este=acumuladoMes(m,dias);
   let corte=dias, prevision=null, previsto=este[dias-1];
   if(enCurso){
     // hasta el último día con movimientos (como en Previsión), y la previsión acaba en el mismo importe que allí
-    const pm=previsionMes(); corte=Math.max(1,Math.min(dias,pm&&pm.corte?pm.corte:+hoy().slice(8,10)));
+    const pm=previsionMes(); corte=Math.max(1,Math.min(dias,pm&&pm.corte?pm.corte:diaDe(hoy(),P)));
     const ya=este[corte-1], resto=media[dias-1]-media[corte-1];
     previsto=pm?Math.max(ya,pm.previsto):ya+resto;
     prevision=media.map((v,i)=>i<corte-1?null:ya+(previsto-ya)*(resto>0?(v-media[corte-1])/resto:(i-corte+1)/Math.max(1,dias-corte)));
   }
   // categorías que van muy por encima de lo habitual a estas alturas del mes
-  const habitual={}; ms.forEach(x=>x.r.gs.forEach(g=>{ if(+g.fecha.slice(8,10)<=corte){ const v=gastoDe(g); if(v) habitual[g.cat||'']=(habitual[g.cat||'']||0)+v/ms.length; } }));
-  const ya={}; resumenMes(m).gs.forEach(g=>{ if(+g.fecha.slice(8,10)<=corte){ const v=gastoDe(g); if(v) ya[g.cat||'']=(ya[g.cat||'']||0)+v; } });
+  const enCorte=g=>diaDe(g.fecha,per(kDe(g.fecha)))<=corte;
+  const habitual={}; ms.forEach(x=>x.r.gs.forEach(g=>{ if(enCorte(g)){ const v=gastoDe(g); if(v) habitual[g.cat||'']=(habitual[g.cat||'']||0)+v/ms.length; } }));
+  const ya={}; resumenMes(m).gs.forEach(g=>{ if(diaDe(g.fecha,P)<=corte){ const v=gastoDe(g); if(v) ya[g.cat||'']=(ya[g.cat||'']||0)+v; } });
   const avisos=Object.entries(ya).map(([c,v])=>({c,v,h:habitual[c]||0})).filter(o=>o.v-o.h>=15 && o.v>o.h*1.5).sort((a,b)=>(b.v-b.h)-(a.v-a.h)).slice(0,3);
-  return {m,dias,enCurso,corte,este,media,prev,prevision,previsto,n:ms.length,dif:este[corte-1]-media[corte-1],avisos};
+  return {m,P,dias,enCurso,corte,este,media,prev,prevision,previsto,n:ms.length,dif:este[corte-1]-media[corte-1],avisos};
 }
 function ritmoLeyenda(d){
   const dash=c=>`<span><i class="line" style="background:repeating-linear-gradient(90deg,${c} 0 4px,transparent 4px 7px)"></i>`;
@@ -2192,23 +2264,25 @@ function ritmoLeyenda(d){
 function ritmoHTML(d){
   const nomMes=MESESL[+d.m.slice(5,7)-1], pos=d.dif<=0, col=pos?'var(--pos)':'var(--neg)';
   const badge=Math.abs(d.dif)<1?'<span class="pill">En línea con tu media</span>':`<span class="pill num" style="color:${col};background:color-mix(in srgb,${col} 13%,transparent);font-weight:600">${pos?'▼':'▲'} ${eur2.format(Math.abs(d.dif))} ${pos?'por debajo':'por encima'} de tu media</span>`;
-  const mediaFin=d.media[d.dias-1];
+  const mediaFin=d.media[d.dias-1], nat=d.P.natural;
+  const hasta=nat?`hasta el día ${d.corte}`:`hasta el ${fmtCorta(sumDias(d.P.desde,d.corte-1))} (día ${d.corte} de ${d.dias} desde la nómina)`;
   const resumen=d.enCurso
-    ? `Llevas <b class="num">${eur.format(d.este[d.corte-1])}</b> hasta el día ${d.corte}; a estas alturas sueles llevar ${eur.format(d.media[d.corte-1])}. Si sigues tu ritmo habitual acabarás ${nomMes} en <b class="num">${eur.format(d.previsto)}</b> <span class="${d.previsto>mediaFin?'down':'up'}">(${sgn(d.previsto-mediaFin)} frente a tu media de ${eur.format(mediaFin)})</span>.`
-    : `Gastaste <b class="num">${eur.format(d.previsto)}</b> en ${nomMes}, <span class="${d.previsto>mediaFin?'down':'up'}">${sgn(d.previsto-mediaFin)}</span> frente a tu media de ${eur.format(mediaFin)}.`;
+    ? `Llevas <b class="num">${eur.format(d.este[d.corte-1])}</b> ${hasta}; a estas alturas sueles llevar ${eur.format(d.media[d.corte-1])}. Si sigues tu ritmo habitual acabarás ${nat?nomMes:`el mes (hasta el ${fmtCorta(d.P.hasta)})`} en <b class="num">${eur.format(d.previsto)}</b> <span class="${d.previsto>mediaFin?'down':'up'}">(${sgn(d.previsto-mediaFin)} frente a tu media de ${eur.format(mediaFin)})</span>.`
+    : `Gastaste <b class="num">${eur.format(d.previsto)}</b> en ${nomMes}${nat?'':` (${rangoPer(d.m)})`}, <span class="${d.previsto>mediaFin?'down':'up'}">${sgn(d.previsto-mediaFin)}</span> frente a tu media de ${eur.format(mediaFin)}.`;
   const av=d.avisos.length?`<div style="margin-top:10px;display:grid;gap:6px">${d.avisos.map(o=>`<div style="display:flex;gap:8px;align-items:flex-start;font-size:13px"><span aria-hidden="true">📈</span><span><b>${esc(o.c?catNombre(o.c):'Sin categoría')}</b>: ${o.h>=1?`${pct(o.v/o.h-1,0)} más de lo habitual`:'casi no sueles gastar aquí'}. <span class="muted">Llevas ${eur2.format(o.v)}${d.enCurso?' a día de hoy':''}${o.h>=1?`; lo normal ${d.enCurso?'a estas alturas':'en un mes'} son ${eur2.format(o.h)}`:''}.</span></span></div>`).join('')}</div>`:'';
   return `<div class="cardhead"><h2>${d.enCurso?'¿Cómo vas este mes?':'¿Cómo fue '+nomMes+'?'}</h2>${badge}</div>
-    <p class="muted" style="font-size:12.5px;margin:0 0 8px">Gasto acumulado día a día, comparado con tu ritmo habitual.</p>${ritmoLeyenda(d)}<div class="chart" data-ritmo></div>
+    <p class="muted" style="font-size:12.5px;margin:0 0 8px">${d.P.natural?'Gasto acumulado día a día, comparado con tu ritmo habitual.':`Gasto acumulado desde ${d.P.ini?'la nómina del':'el'} ${fmtCorta(d.P.desde)} hasta el ${fmtCorta(d.P.hasta)}${d.P.fin||!d.enCurso?'':' (o hasta que cobres la siguiente)'}, comparado con tu ritmo habitual.`}</p>${ritmoLeyenda(d)}<div class="chart" data-ritmo></div>
     <p style="margin:10px 0 0;font-size:13.5px">${resumen}</p>${av}`;
 }
 function renderGastos(){
   if(!D) return;
   const hayDatos=D.gastos.length>0;
-  if(!gMes) gMes = hayDatos ? D.gastos.map(g=>g.fecha).sort().at(-1).slice(0,7) : hoy().slice(0,7);
-  const anual=gPer==='año', clave=anual?gMes.slice(0,4):gMes, etiqueta=anual?'el año '+clave:fmtMesL(gMes);
+  if(!gMes) gMes = hayDatos ? kDe(D.gastos.map(g=>g.fecha).sort().at(-1)) : kHoy();
+  if(gMes>kHoy()) gMes=kHoy();
+  const anual=gPer==='año', clave=anual?gMes.slice(0,4):gMes, etiqueta=anual?'el año '+clave:fmtMesL(gMes), rng=anual?'':rangoPer(gMes);
   $$('#gPeriodo button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.p===gPer));
-  $('#gMes').textContent=anual?clave:fmtMesL(gMes);
-  $('#gNext').disabled = anual ? clave>=hoy().slice(0,4) : gMes>=hoy().slice(0,7);
+  $('#gMes').innerHTML=anual?clave:esc(fmtMesL(gMes))+(rng?`<span class="rng">${rng}</span>`:'');
+  $('#gNext').disabled = anual ? clave>=hoy().slice(0,4) : gMes>=kHoy();
   const R=resumenMes(clave);
   const previos = anual ? [resumenMes(String(+clave-1))].filter(r=>r.gs.length) : [1,2,3,4,5,6].map(k=>resumenMes(mesMas(gMes,-k))).filter(r=>r.gs.length);
   const media=previos.length?previos.reduce((a,r)=>a+r.gasto,0)/previos.length:null;
@@ -2252,7 +2326,7 @@ function renderGastos(){
     // flujo del dinero del periodo
     const F=flujoDe(R);
     $('#gFlujoTitle').textContent=anual?'Flujo del dinero en '+clave:'Flujo del dinero · '+fmtMesL(gMes);
-    $('#gFlujoNote').textContent=(F.internos?`No cuentan ${F.internos} movimiento(s) entre tus cuentas. `:'Sin transferencias entre tus cuentas. ')+(F.tI&&F.tG>F.tI?`Has gastado ${eur.format(F.tG-F.tI)} más de lo que ha entrado.`:F.tI?`Te queda el ${pct((F.tI-F.tG)/F.tI,0)} de lo que ha entrado.`:'');
+    $('#gFlujoNote').textContent=(rng?`De nómina a nómina: ${rng}. `:'')+(F.internos?`No cuentan ${F.internos} movimiento(s) entre tus cuentas. `:'Sin transferencias entre tus cuentas. ')+(F.tI&&F.tG>F.tI?`Has gastado ${eur.format(F.tG-F.tI)} más de lo que ha entrado.`:F.tI?`Te queda el ${pct((F.tI-F.tG)/F.tI,0)} de lo que ha entrado.`:'');
     sankeyChart($('#gFlujo'),{izq:F.izq,der:F.der,onPick:id=>{ gFiltro=gFiltro===id?'':id; gDetEn='cats'; renderGastos(); $('#gCats').scrollIntoView({behavior:'smooth',block:'nearest'}); }});
     // cómo va el mes frente a lo habitual (solo en vista mensual)
     const rt=anual?null:ritmoMes(gMes);
@@ -2302,10 +2376,101 @@ function renderGastos(){
   const uso=id=>D.gastos.filter(g=>g.cat===id).length;
   $('#rTable').innerHTML=`<thead><tr><th>Si contiene</th><th>Categoría</th><th></th></tr></thead><tbody>`+D.reglas.map((r,i)=>`<tr data-r="${i}"><td><input class="minisel" data-rt value="${esc(r.texto)}" aria-label="Texto">${r.importe!=null?` <span class="muted">solo si son ${eur2.format(r.importe)}</span>`:''}</td><td><select class="minisel" data-rc aria-label="Categoría">${catOptions(r.cat,null)}</select></td><td><button class="btn sm danger" data-rdel aria-label="Borrar regla">✕</button></td></tr>`).join('')+'</tbody>';
   $('#cTable').innerHTML=`<thead><tr><th>Categoría</th><th>Tipo</th><th class="r">Presupuesto mensual</th><th class="r">Movimientos</th><th></th></tr></thead><tbody>`+D.categorias.map(c=>`<tr data-cid="${c.id}"><td><input class="minisel" data-cn value="${esc(c.nombre)}" aria-label="Nombre"></td><td class="muted">${{gasto:'Gasto',ingreso:'Ingreso',interno:'No cuenta'}[c.tipo]}</td><td class="r">${c.tipo==='gasto'?`<input class="minisel num" data-cp inputmode="decimal" value="${pres[c.id]?nf2.format(pres[c.id]):''}" placeholder="—" style="width:90px;text-align:right" aria-label="Presupuesto ${esc(c.nombre)}">`:''}</td><td class="r num">${uso(c.id)}</td><td>${uso(c.id)?'':'<button class="btn sm danger" data-cdel aria-label="Borrar categoría">✕</button>'}</td></tr>`).join('')+'</tbody>';
-  renderSubs(); renderImportaciones();
+  renderSubs(); renderImportaciones(); renderCiclo();
+}
+/* ----- Ajustes del mes de nómina y aviso al móvil (Web Push) ----- */
+function renderCiclo(){
+  const host=$('#gCicloBody'); if(!host || !host.closest) return;
+  const c=cicloCfg(), C=cicloCache(), ult=C.nominas.slice(-4).reverse();
+  host.innerHTML=`<p class="muted" style="font-size:12.5px;margin-top:0">Con «de nómina a nómina», cada mes de Gastos (resumen, flujo del dinero, «¿Cómo vas este mes?», presupuestos y previsión) empieza el día que cobras la nómina y acaba el día antes de la siguiente, como tus cierres. Mientras la nómina no llega, o si no se reconoce, se usa el día habitual.</p>
+    <div class="fields" style="align-items:flex-end">
+      <label class="field">El mes de gastos va<select id="ciModo"><option value="nomina" ${c.modo==='nomina'?'selected':''}>De nómina a nómina</option><option value="natural" ${c.modo==='natural'?'selected':''}>Del día 1 a fin de mes</option></select></label>
+      <label class="field">Día habitual de cobro<input id="ciDia" inputmode="numeric" value="${c.dia}" style="width:70px;text-align:right"></label>
+      <label class="field" style="flex:1;min-width:200px">La nómina se reconoce por el texto<input id="ciTxt" value="${esc(c.texto)}" placeholder="automático (o el nombre de tu empresa)"></label>
+      <label class="field">Importe mínimo<input id="ciMin" inputmode="decimal" value="${c.min?nf2.format(c.min):''}" placeholder="${isFinite(C.umbral)?'auto: '+eur.format(C.umbral):'auto'}" style="width:120px;text-align:right"></label>
+    </div>
+    <div style="font-size:13px;margin-top:6px">${ult.length?`<b>Últimas nóminas reconocidas</b><div class="catdet"><div class="lst">${ult.map(g=>`<div class="it"><span class="num muted">${fmtFecha(g.fecha)}</span><span title="${esc(g.concepto)}">${esc(g.concepto)}</span><b class="num">${eur2.format(g.importe)}</b></div>`).join('')}</div></div>`
+      :`<span class="muted">Aún no reconozco ninguna nómina en tus movimientos, así que el mes empieza el día ${c.dia}. Si el concepto de tu nómina no dice «nómina», escribe arriba una palabra que siempre lleve (p. ej. el nombre de tu empresa).</span>`}</div>
+    <h2 style="margin-top:18px">Aviso en el móvil cuando cobres</h2>
+    <div id="ciPush" style="font-size:13.5px"></div>`;
+  const guardar=async()=>{
+    const n={modo:$('#ciModo').value,dia:Math.min(31,Math.max(1,Math.round(numIn($('#ciDia').value,27)))),texto:$('#ciTxt').value.trim(),min:Math.max(0,numIn($('#ciMin').value,0))};
+    D.ajustes.ciclo=n; gMes=null; await save(); renderGastos(); avSincronizarPistas(true);
+    toast(n.modo==='natural'?'El mes de gastos va del día 1 a fin de mes':`Mes de nómina a nómina: ${rangoPer(kHoy())}`);
+  };
+  ['#ciModo','#ciDia','#ciTxt','#ciMin'].forEach(s=>$(s).onchange=guardar);
+  renderPush();
+}
+const AV_DISP='avisos-dispositivos.json', AV_SRV='avisos-servidor.json';
+const PUSH_OK=typeof navigator!=='undefined' && 'serviceWorker' in navigator && typeof window!=='undefined' && 'PushManager' in window && 'Notification' in window;
+const esIOS=()=>/iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
+const instalada=()=>navigator.standalone===true || !!window.matchMedia?.('(display-mode: standalone)')?.matches;
+const b64uBytes=s=>{ const b=atob(s.replace(/-/g,'+').replace(/_/g,'/')+'==='.slice((s.length+3)%4)); return Uint8Array.from(b,c=>c.charCodeAt(0)); };
+const nombreDisp=()=>/iPhone/.test(navigator.userAgent)?'iPhone':/iPad/.test(navigator.userAgent)||esIOS()?'iPad':/Android/.test(navigator.userAgent)?'Android':'Ordenador';
+const odRutaHermano=n=>od.ruta.split('/').slice(0,-1).concat(n).join('/');
+let pushSrv=null, pushSrvLeido=false;
+async function pushCargarSrv(){ if(!od) return null; try{ const r=await odLeerHermano(AV_SRV); pushSrv=r?JSON.parse(r.texto):null; }catch(e){ pushSrv=null; } pushSrvLeido=true; return pushSrv; }
+// Lo que el PC necesita para reconocer tu nómina (sin datos de tus movimientos): texto, importe mínimo y día habitual
+function pistasNomina(){ const c=cicloCfg(), C=cicloCache(); return {texto:c.texto,min:c.min,minAuto:isFinite(C.umbral)?Math.round(C.umbral):0,dia:c.dia}; }
+// Lee, cambia y guarda avisos-dispositivos.json junto a datos.json (si otro dispositivo lo cambió a la vez, se repite)
+async function avActualizar(fn){
+  for(let i=0;i<3;i++){
+    const r=await odLeerHermano(AV_DISP), d=r?JSON.parse(r.texto):{app:'mi-patrimonio-avisos'};
+    if(!Array.isArray(d.dispositivos)) d.dispositivos=[];
+    if(fn(d)===false) return d;
+    d.nomina=pistasNomina(); d.origen=location.origin+location.pathname.replace(/[^/]*$/,''); d.actualizado=new Date().toISOString().slice(0,19);
+    try{ await odEscribir(odRutaHermano(AV_DISP),JSON.stringify(d,null,1),r?r.etag:null); return d; }catch(e){ if(!e.conflicto) throw e; }
+  }
+  throw new Error('otro dispositivo estaba cambiando el archivo; inténtalo de nuevo');
+}
+async function avSincronizarPistas(forzar){
+  if(!od || ls.get('pushOn')!=='1') return;
+  try{ await avActualizar(d=>forzar || JSON.stringify(d.nomina||{})!==JSON.stringify(pistasNomina())); }catch(e){ console.warn('avisos',e); }
+}
+async function pushSub(){ try{ const reg=await navigator.serviceWorker.getRegistration(); return reg?await reg.pushManager.getSubscription():null; }catch(e){ return null; } }
+async function renderPush(){
+  const el=$('#ciPush'); if(!el || !el.closest) return;
+  const pc='El aviso lo manda tu PC al descargar los movimientos del banco (cada día a las 8:00 y al encenderlo). Si está apagado, lo verás igualmente en el Resumen al abrir la app.';
+  if(!PUSH_OK || location.protocol!=='https:'){ el.innerHTML=`<p class="muted" style="margin:0">Los avisos se activan desde la app publicada en el iPhone (la que abres desde su icono). ${pc}</p>`; return; }
+  if(esIOS() && !instalada()){ el.innerHTML=`<p style="margin:0">Para recibir avisos en el iPhone, abre la app desde su icono de la pantalla de inicio (en Safari: <b>Compartir → Añadir a pantalla de inicio</b>) y actívalos desde ahí.</p>`; return; }
+  if(!od){ el.innerHTML=`<p class="muted" style="margin:0">Los avisos necesitan la app conectada a OneDrive por internet (como en el iPhone). ${pc}</p>`; return; }
+  if(!pushSrvLeido) await pushCargarSrv();
+  const sub=await pushSub(), on=!!sub && ls.get('pushOn')==='1' && Notification.permission==='granted';
+  const caducado=on && (pushSrv?.caducados||[]).includes(sub.endpoint);
+  const ult=pushSrv?.ultimoAviso;
+  el.innerHTML=`<p style="margin:0 0 8px">${on?(caducado?'⚠️ El aviso de este dispositivo ha caducado: vuelve a activarlo.':'✅ <b>Activado en este dispositivo.</b> Cuando entre la nómina te llegará una notificación para hacer el cierre.'):'Recibe una notificación en este dispositivo en cuanto entre la nómina, para hacer el cierre del mes.'}</p>
+    ${pushSrv?.vapidPublic?'':'<p class="hint" style="margin:0 0 8px">Antes, prepara el PC: ejecuta una vez <b>Actualizar movimientos.bat</b> (crea la clave de avisos en tu OneDrive) y vuelve aquí.</p>'}
+    <div style="display:flex;gap:8px;flex-wrap:wrap">${on&&!caducado?'<button class="btn sm" id="pushOff">Desactivar en este dispositivo</button>':'<button class="btn sm primary" id="pushOn">Activar avisos en este dispositivo</button>'}</div>
+    <p class="muted" style="font-size:12.5px;margin:8px 0 0">${pc}${ult?.fecha?` Último aviso enviado: ${fmtFecha(ult.fecha.slice(0,10))}.`:''}</p>`;
+  $('#pushOn')&&($('#pushOn').onclick=pushActivar); $('#pushOff')&&($('#pushOff').onclick=pushDesactivar);
+}
+async function pushActivar(){
+  try{
+    const perm=await Notification.requestPermission();   // lo primero: iOS solo lo permite justo al pulsar
+    if(perm!=='granted'){ alert('No has dado permiso para las notificaciones. En el iPhone: Ajustes → Notificaciones → Patrimonio → Permitir notificaciones.'); return renderPush(); }
+    const srv=await pushCargarSrv();
+    if(!srv?.vapidPublic){ alert('Falta preparar el PC: ejecuta una vez «Actualizar movimientos.bat» (crea avisos-servidor.json en tu OneDrive), espera a que OneDrive sincronice y vuelve a pulsar.'); return renderPush(); }
+    const reg=await navigator.serviceWorker.ready, clave=b64uBytes(srv.vapidPublic);
+    let sub=await reg.pushManager.getSubscription();
+    const k=sub?.options?.applicationServerKey;
+    if(sub && k && new Uint8Array(k).join()!==clave.join()){ await sub.unsubscribe(); sub=null; }   // la clave del PC ha cambiado
+    if(!sub) sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:clave});
+    const js=sub.toJSON();
+    await avActualizar(d=>{ d.dispositivos=d.dispositivos.filter(x=>x.endpoint!==js.endpoint); d.dispositivos.push({nombre:nombreDisp(),alta:hoy(),endpoint:js.endpoint,keys:js.keys}); });
+    ls.set('pushOn','1'); toast('Avisos activados en este dispositivo');
+  }catch(e){ alert('No se pudieron activar los avisos: '+e.message); }
+  renderPush();
+}
+async function pushDesactivar(){
+  try{
+    const sub=await pushSub();
+    if(sub){ const ep=sub.endpoint; await sub.unsubscribe(); await avActualizar(d=>{ d.dispositivos=d.dispositivos.filter(x=>x.endpoint!==ep); }); }
+    ls.set('pushOn','0'); toast('Avisos desactivados en este dispositivo');
+  }catch(e){ alert('No se pudieron desactivar: '+e.message); }
+  renderPush();
 }
 $('#gPrev').onclick=()=>{ gMes = gPer==='año' ? (+gMes.slice(0,4)-1)+gMes.slice(4) : mesMas(gMes,-1); renderGastos(); };
-$('#gNext').onclick=()=>{ gMes = gPer==='año' ? (+gMes.slice(0,4)+1)+gMes.slice(4) : mesMas(gMes,1); if(gMes>hoy().slice(0,7)) gMes=hoy().slice(0,7); renderGastos(); };
+$('#gNext').onclick=()=>{ gMes = gPer==='año' ? (+gMes.slice(0,4)+1)+gMes.slice(4) : mesMas(gMes,1); if(gMes>kHoy()) gMes=kHoy(); renderGastos(); };
 $('#gPeriodo').onclick=e=>{ const b=e.target.closest('button'); if(!b) return; gPer=b.dataset.p; renderGastos(); };
 $('#gSync').onclick=()=>apSync(true);
 $('#gSyncBank').onclick=()=>bkSync();
@@ -2427,14 +2592,14 @@ $('#gTable').addEventListener('click',async e=>{
   D.gastos=D.gastos.filter(x=>x!==g); if(g.hash) D.gastosIgnorados.push(g.hash);
   await save(); renderGastos();
 });
-$('#gAddBtn').onclick=()=>{ $('#gAddPanel').classList.toggle('hidden'); $('#aFecha').value=gMes===hoy().slice(0,7)?hoy():gMes+'-01'; $('#aCon').focus(); };
+$('#gAddBtn').onclick=()=>{ $('#gAddPanel').classList.toggle('hidden'); $('#aFecha').value=gMes===kHoy()?hoy():per(gMes).desde; $('#aCon').focus(); };
 $('#aCancel').onclick=()=>$('#gAddPanel').classList.add('hidden');
 $('#aOk').onclick=async()=>{
   const v=parseExpr($('#aImp').value), con=$('#aCon').value.trim(), f=$('#aFecha').value;
   if(!f || !con || v==null || isNaN(v) || !v){ alert('Rellena fecha, concepto e importe.'); return; }
   const g={id:uid('g'),fecha:f,hora:'',importe:Math.abs(v)*+$('#aTipo').value,concepto:con,tarjeta:'',origen:'Manual'};
   if($('#aCat').value){ g.cat=$('#aCat').value; g.auto=false; } else autoCat(g);
-  D.gastos.push(g); gMes=f.slice(0,7); $('#aCon').value=''; $('#aImp').value='';
+  D.gastos.push(g); gMes=kDe(f); $('#aCon').value=''; $('#aImp').value='';
   await save(); renderGastos(); toast('Movimiento añadido');
 };
 $('#rAdd').onclick=async()=>{ const t=$('#rTxt').value.trim(); if(!t) return; D.reglas.unshift({texto:t,cat:$('#rCat').value,u:true}); $('#rTxt').value=''; await save(); renderGastos(); toast('Regla añadida. Pulsa «Reaplicar reglas» para aplicarla a lo ya importado.'); };
@@ -2661,16 +2826,19 @@ function leerAportes(){
 /* ----- Recordatorio ----- */
 // Categorías del mes en curso que han llegado al 80 % de su presupuesto
 function alertasPresupuesto(){
-  const pres=D.ajustes.presupuestos||{}, R=resumenMes(hoy().slice(0,7));
+  const pres=D.ajustes.presupuestos||{}, R=resumenMes(kHoy());
   return Object.entries(pres).filter(([id,p])=>p>0 && catById(id)).map(([id,p])=>({id,nombre:catNombre(id),gasto:R.porCat[id]||0,pres:p,pct:(R.porCat[id]||0)/p})).filter(a=>a.pct>=0.8).sort((a,b)=>b.pct-a.pct);
 }
 function renderBanner(){
   const el=$('#resBanner'); if(!el) return;
   const S=regsOrd(), last=S.at(-1), t=hoy(), mesAct=t.slice(0,7);
   const hecho=S.some(r=>r.mes===mesAct), dias=last?(toDate(t)-toDate(last.fecha))/864e5:999;
-  const toca=(!hecho && +t.slice(8)>=D.ajustes.recordatorioDia) || dias>=35;
+  const nom=nominaSinCierre();   // ha entrado la nómina y aún no has hecho el cierre
+  const toca=nom || (!hecho && +t.slice(8)>=D.ajustes.recordatorioDia) || dias>=35;
   const alertas=alertasPresupuesto().map(a=>`<div class="hint alerta" style="${a.pct>=1?'':'border-left-color:var(--s4)'}">${a.pct>=1?'🔴':'🟠'} <span><b>${esc(a.nombre)}</b>: ${eur.format(a.gasto)} de ${eur.format(a.pres)} este mes (${pct(a.pct,0)}).</span></div>`).join('');
-  el.innerHTML = alertas + (toca ? `<div class="hint" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:13.5px;margin-bottom:14px">🗓️ <span>Toca el cierre de <b>${fmtMesL(mesAct)}</b>${last?` (el último fue el ${fmtFecha(last.fecha)})`:''}.</span><button class="btn sm primary" id="bannerBtn">Hacer cierre</button></div>` : '');
+  const txt = nom ? `💶 <span>Has cobrado la nómina el <b>${fmtFecha(nom.g.fecha)}</b> (${eur.format(nom.g.importe)}): toca el cierre de <b>${fmtMesL(nom.mes)}</b>${last?` (el último fue el ${fmtFecha(last.fecha)})`:''}.</span>`
+    : `🗓️ <span>Toca el cierre de <b>${fmtMesL(mesAct)}</b>${last?` (el último fue el ${fmtFecha(last.fecha)})`:''}.</span>`;
+  el.innerHTML = alertas + (toca ? `<div class="hint" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:13.5px;margin-bottom:14px">${txt}<button class="btn sm primary" id="bannerBtn">Hacer cierre</button></div>` : '');
   if(toca) $('#bannerBtn').onclick=()=>openForm();
 }
 function descargarICS(){
@@ -2687,7 +2855,7 @@ function descargarICS(){
 
 /* ----- Objetivos ----- */
 function gastoMensualReal(n=12){ // media de los últimos n meses COMPLETOS (con extracto del banco: hay ingresos), sin el mes en curso
-  const act=hoy().slice(0,7); const ms=[];
+  const act=kHoy(); const ms=[];
   for(let k=1;k<=24 && ms.length<n;k++){ const m=mesMas(act,-k); const r=resumenMes(m); if(r.gs.length && r.ingreso>0 && r.gs.some(g=>g.origen!=='Apple Pay')) ms.push(r.gasto); }
   return ms.length>=3 ? {valor:ms.reduce((a,b)=>a+b,0)/ms.length, meses:ms.length} : null;
 }
@@ -3129,7 +3297,7 @@ function renderInforme(){
   el.classList.remove('hidden');
   $('#repClose').onclick=()=>{ informe=null; el.classList.add('hidden'); };
   if($('#repUndo')) $('#repUndo').onclick=()=>deshacerImport(informe.lotes);
-  if(sin) $('#repSin').onclick=()=>{ gFiltro='__sin'; gPer='mes'; gMes=G.filter(g=>!g.cat).map(g=>g.fecha).sort().at(-1).slice(0,7); renderGastos(); $('#gTable').scrollIntoView({behavior:'smooth'}); };
+  if(sin) $('#repSin').onclick=()=>{ gFiltro='__sin'; gPer='mes'; gMes=kDe(G.filter(g=>!g.cat).map(g=>g.fecha).sort().at(-1)); renderGastos(); $('#gTable').scrollIntoView({behavior:'smooth'}); };
   el.scrollIntoView({behavior:'smooth',block:'start'});
 }
 // Zona de arrastrar y soltar
@@ -3338,7 +3506,7 @@ function ventanaPrevision(S,V,hastaFecha){
   return W.map(s=>({f:s.r.fecha,v:V(s)}));
 }
 // Meses completos de gastos (con extracto del banco: hay ingresos), sin el mes en curso
-function mesesCompletosGasto(n=12,act=hoy().slice(0,7)){
+function mesesCompletosGasto(n=12,act=kHoy()){
   const ms=[];
   for(let k=1;k<=24 && ms.length<n;k++){ const m=mesMas(act,-k), r=resumenMes(m); if(r.gs.length && r.ingreso>0 && r.gs.some(g=>g.origen!=='Apple Pay')) ms.push({m,r}); }
   return ms;
@@ -3346,13 +3514,13 @@ function mesesCompletosGasto(n=12,act=hoy().slice(0,7)){
 const gastoDe=g=>{ const t=g.cat?catTipo(g.cat):(g.importe<0?'gasto':'ingreso'); return t==='gasto'?-efectivo(g):0; };
 function previsionMes(){
   const ms=mesesCompletosGasto(12); if(!ms.length) return null;
-  const act=hoy().slice(0,7), r=resumenMes(act);
+  const act=kHoy(), r=resumenMes(act), P=per(act), h=hoy();
   const media=ms.reduce((a,x)=>a+x.r.gasto,0)/ms.length, mediaIng=ms.reduce((a,x)=>a+x.r.ingreso,0)/ms.length;
-  // hasta qué día del mes tenemos movimientos (si los bancos no se han sincronizado hoy, no se cuentan los días sin datos)
-  const ult=D.gastos.reduce((a,g)=>g.fecha>a?g.fecha:a,''), corte=ult.startsWith(act)?Math.min(+ult.slice(8,10),+hoy().slice(8,10)):(ult>act?+hoy().slice(8,10):0);
-  const diasMes=new Date(+act.slice(0,4),+act.slice(5,7),0).getDate();
+  // hasta qué día del mes (o del periodo de nómina a nómina) tenemos movimientos (si los bancos no se han sincronizado hoy, no se cuentan los días sin datos)
+  const ult=D.gastos.reduce((a,g)=>g.fecha>a?g.fecha:a,''), corte=ult>=P.desde?Math.min(P.dias,diaDe(ult<h?ult:h,P)):0;
+  const diasMes=P.dias;
   // qué parte del gasto del mes sueles llevar hecha a estas alturas
-  const fr=ms.map(x=>{ const tot=x.r.gasto; if(tot<=0) return null; const hecho=x.r.gs.filter(g=>+g.fecha.slice(8,10)<=corte).reduce((a,g)=>a+gastoDe(g),0); return Math.min(1,Math.max(0,hecho/tot)); }).filter(v=>v!=null);
+  const fr=ms.map(x=>{ const tot=x.r.gasto; if(tot<=0) return null; const Px=per(x.m), hecho=x.r.gs.filter(g=>diaDe(g.fecha,Px)<=corte).reduce((a,g)=>a+gastoDe(g),0); return Math.min(1,Math.max(0,hecho/tot)); }).filter(v=>v!=null);
   const f=fr.length?fr.reduce((a,b)=>a+b,0)/fr.length:corte/diasMes;
   const previsto=r.gasto+media*(1-f);
   return {act,r,media,mediaIng,corte,diasMes,f,previsto,ms,ult};
@@ -3417,7 +3585,7 @@ function renderPrevGastos(pm){
   const esperado=media*f, max=Math.max(previsto,media,r.gasto)*1.05||1, ahorro=Math.max(r.ingreso,mediaIng)-previsto;
   $('#pvMes').innerHTML=`<div class="cardhead"><h2>Cómo acabará ${nomMes}</h2><span class="muted" style="font-size:12px">${ult?'movimientos hasta el '+fmtFecha(ult):''}</span></div>
     <div class="num" style="font-size:30px;font-weight:650">${eur.format(previsto)}</div>
-    <p style="margin:4px 0 10px">de gasto previsto al acabar el mes. Llevas <b>${eur.format(r.gasto)}</b> ${corte?`hasta el día ${corte} de ${diasMes}`:'(aún no hay movimientos este mes)'}; a estas alturas sueles llevar ${eur.format(esperado)} (${pct(f,0)} del mes).</p>
+    <p style="margin:4px 0 10px">de gasto previsto al acabar el mes${per(act).natural?'':` (${rangoPer(act)}, de nómina a nómina)`}. Llevas <b>${eur.format(r.gasto)}</b> ${corte?`hasta el día ${corte} de ${diasMes}`:'(aún no hay movimientos este mes)'}; a estas alturas sueles llevar ${eur.format(esperado)} (${pct(f,0)} del mes).</p>
     <div style="position:relative;height:12px;background:var(--surface-2);border-radius:4px;overflow:hidden">
       <div style="position:absolute;left:0;top:0;bottom:0;width:${previsto/max*100}%;background:var(--s1);opacity:.3;border-radius:4px"></div>
       <div style="position:absolute;left:0;top:0;bottom:0;width:${r.gasto/max*100}%;background:var(--s1);border-radius:4px"></div>
@@ -3459,7 +3627,14 @@ function show(tab){
 }
 $('#tabs').onclick=e=>{ const b=e.target.closest('button'); if(!b) return; if(b.dataset.tab==='cierre'){ openForm(); return; } show(b.dataset.tab); };
 function renderAll(){ renderResumen(); renderHistorico(); renderCuentas(); renderGastos(); renderObjetivos(); renderPrevision(); }
-function start(){ $('#connect').classList.add('hidden'); $('#app').classList.remove('hidden'); renderAll(); show(current==='cierre'?'resumen':current); setTimeout(bkAuto,1500); }
+function start(){
+  $('#connect').classList.add('hidden'); $('#app').classList.remove('hidden'); renderAll(); show(current==='cierre'?'resumen':current); setTimeout(bkAuto,1500);
+  // Al abrir la app desde el aviso de nómina (#cierre), directa al formulario del cierre
+  if(location.hash==='#cierre'){ history.replaceState(null,'',location.pathname+location.search); setTimeout(()=>openForm(),400); }
+  setTimeout(()=>avSincronizarPistas(false),5000);
+}
+// Si la app ya estaba abierta, el aviso le pide (desde el service worker) que abra el cierre
+navigator.serviceWorker?.addEventListener('message',e=>{ if(e.data?.accion==='cierre' && D && current!=='cierre') openForm(); });
 let rz; window.addEventListener('resize',()=>{ clearTimeout(rz); rz=setTimeout(()=>{ if(D&&current==='resumen') renderResumen(); if(D&&current==='gastos') renderGastos(); if(D&&current==='objetivos') renderObjetivos(); if(D&&current==='prevision') renderPrevision(); },150); });
 
 applyTheme();
