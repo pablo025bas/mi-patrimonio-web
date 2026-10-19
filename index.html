@@ -402,6 +402,7 @@ nav .ti{display:none}nav .s{display:none}
         </div>
       </div>
       <div class="card" id="gBizum" style="margin-bottom:14px"></div>
+      <div class="card" id="gViajes" style="margin-bottom:14px"></div>
       <div class="card" style="margin-bottom:14px">
         <div class="cardhead"><h2 id="gMovTitle">Movimientos</h2>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -596,7 +597,7 @@ const fmtFecha = f => { const [y,m,d]=f.split('-'); return `${+d} ${MESES[+m-1]}
 const toDate = f => new Date(f+'T12:00:00');
 const hoy = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
 // La pone automatico/publicar_web.py al publicar; en local es 'dev'
-const VERSION='c8f37daa';
+const VERSION='3e9e17ad';
 function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('show'),2600); }
 const uid = p => p+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 
@@ -1870,7 +1871,7 @@ async function bkSync(interactivo=true){
     // Sin concepto (p. ej. Trade Republic solo da fecha e importe): solo sirve para enlazar con Apple Pay; no se importa ni se marca como visto, por si el pago de Apple Pay llega más tarde
     if(estado==='nuevo' && !String(m.concepto||'').trim()) continue;
     vistos.add(hash);
-    res.push({fecha:f.fecha,importe,concepto,hash,estado,gem,banco:m.banco,cuentaPat,cuentaBanco:m.cuenta||''});
+    res.push({fecha:f.fecha,importe,concepto,hash,estado,gem,banco:m.banco,cuentaPat,cuentaBanco:m.cuenta||'',monedaOrig:m.moneda_original||null,importeOrig:m.importe_original??null});
   }
   const nuevos=res.filter(r=>r.estado==='nuevo'), rep=res.filter(r=>r.estado==='repetido').length, ap=res.filter(r=>r.estado==='applepay').length;
   // Saldo de cada banco: solo si tiene un único saldo en el archivo (una cuenta) y es más reciente que el que ya tenías
@@ -1903,7 +1904,7 @@ async function bkSync(interactivo=true){
   const lote={id:uid('L'),cuando:new Date().toISOString().slice(0,16).replace('T',' '),archivo:'movimientos-auto.json',banco:[...new Set(res.map(r=>r.banco))].join(', ')||'Bancos',cuenta:null,n:0,conc:[],hashes:[],saldo:null,saldos};
   let n=0;
   for(const r of res){
-    if(r.estado==='nuevo'){ const g={id:uid('g'),fecha:r.fecha,hora:'',importe:r.importe,concepto:r.concepto,tarjeta:'',origen:r.banco,cuenta:r.cuentaPat,cuentaBanco:r.cuentaBanco||'',lote:lote.id,hash:r.hash,saldo:null,fuente:'Open Banking'}; autoCat(g); D.gastos.push(g); n++; }
+    if(r.estado==='nuevo'){ const g={id:uid('g'),fecha:r.fecha,hora:'',importe:r.importe,concepto:r.concepto,tarjeta:'',origen:r.banco,cuenta:r.cuentaPat,cuentaBanco:r.cuentaBanco||'',lote:lote.id,hash:r.hash,saldo:null,fuente:'Open Banking'}; if(r.monedaOrig && r.monedaOrig!=='EUR'){ g.monedaOrig=r.monedaOrig; g.importeOrig=r.importeOrig; } autoCat(g); D.gastos.push(g); n++; }
     else if(r.estado==='applepay'){ r.gem.conc=true; r.gem.bancoConcepto=r.concepto; r.gem.bancoOrigen=r.banco; if(!r.gem.cuenta && r.cuentaPat) r.gem.cuenta=r.cuentaPat; if(!r.gem.cuentaBanco) r.gem.cuentaBanco=r.cuentaBanco; D.gastosIgnorados.push(r.hash); lote.conc.push(r.gem.id); lote.hashes.push(r.hash); }
     else { D.gastosIgnorados.push(r.hash); lote.hashes.push(r.hash); }
   }
@@ -2274,6 +2275,69 @@ function ritmoHTML(d){
     <p class="muted" style="font-size:12.5px;margin:0 0 8px">${d.P.natural?'Gasto acumulado día a día, comparado con tu ritmo habitual.':`Gasto acumulado desde ${d.P.ini?'la nómina del':'el'} ${fmtCorta(d.P.desde)} hasta el ${fmtCorta(d.P.hasta)}${d.P.fin||!d.enCurso?'':' (o hasta que cobres la siguiente)'}, comparado con tu ritmo habitual.`}</p>${ritmoLeyenda(d)}<div class="chart" data-ritmo></div>
     <p style="margin:10px 0 0;font-size:13.5px">${resumen}</p>${av}`;
 }
+
+/* ============ Viajes: pagos en el extranjero agrupados por escapadas ============ */
+// Heurística: un pago es «extranjero» si el banco lo cobró en otra divisa, si el concepto trae el importe original («12.50 USD»),
+// si termina en un código de país (…LISBOA PT) o si nombra una ciudad extranjera inequívoca. Es una pista, no una certeza: cada viaje se puede renombrar o descartar.
+const PAIS_COD={PT:'Portugal',FR:'Francia',IT:'Italia',GB:'Reino Unido',UK:'Reino Unido',US:'EE. UU.',NL:'Países Bajos',BE:'Bélgica',AT:'Austria',CH:'Suiza',IE:'Irlanda',GR:'Grecia',HR:'Croacia',MA:'Marruecos',TR:'Turquía',CZ:'Chequia',PL:'Polonia',HU:'Hungría',DK:'Dinamarca',SE:'Suecia',FI:'Finlandia',JP:'Japón',MX:'México',TH:'Tailandia',MT:'Malta',CY:'Chipre',IS:'Islandia',EE:'Estonia',LV:'Letonia',LT:'Lituania',SK:'Eslovaquia',SI:'Eslovenia',RO:'Rumanía',BG:'Bulgaria',AE:'Emiratos Árabes',EG:'Egipto',ID:'Indonesia',SG:'Singapur',AU:'Australia',CO:'Colombia',AR:'Argentina',BR:'Brasil',PE:'Perú',CU:'Cuba',DO:'R. Dominicana'};
+const DIVISA_PAIS={USD:'EE. UU.',GBP:'Reino Unido',CHF:'Suiza',JPY:'Japón',MXN:'México',THB:'Tailandia',TRY:'Turquía',MAD:'Marruecos',CZK:'Chequia',PLN:'Polonia',HUF:'Hungría',DKK:'Dinamarca',SEK:'Suecia',NOK:'Noruega',AUD:'Australia',CAD:'Canadá',BRL:'Brasil',ARS:'Argentina',COP:'Colombia',AED:'Emiratos Árabes',IDR:'Indonesia',SGD:'Singapur',HRK:'Croacia',RON:'Rumanía',BGN:'Bulgaria',ISK:'Islandia',CNY:'China',KRW:'Corea del Sur',INR:'India',EGP:'Egipto'};
+const CIUDADES_EXT={lisboa:'Portugal',lisbon:'Portugal',oporto:'Portugal',lagos:'Portugal',faro:'Portugal',paris:'Francia',marseille:'Francia',lyon:'Francia',roma:'Italia',rome:'Italia',milano:'Italia',milan:'Italia',napoli:'Italia',firenze:'Italia',florencia:'Italia',venezia:'Italia',venecia:'Italia',london:'Reino Unido',londres:'Reino Unido',edinburgh:'Reino Unido',berlin:'Alemania',munich:'Alemania',amsterdam:'Países Bajos',bruxelles:'Bélgica',brussels:'Bélgica',praha:'Chequia',prague:'Chequia',wien:'Austria',vienna:'Austria',budapest:'Hungría',dublin:'Irlanda',athens:'Grecia',atenas:'Grecia',marrakech:'Marruecos',istanbul:'Turquía',tokyo:'Japón',kyoto:'Japón','new york':'EE. UU.',miami:'EE. UU.','los angeles':'EE. UU.',copenhagen:'Dinamarca',stockholm:'Suecia',helsinki:'Finlandia',reykjavik:'Islandia',zurich:'Suiza',geneve:'Suiza',geneva:'Suiza'};
+const ONLINE_RE=/\b(amazon|amzn|aliexpress|temu|shein|ebay|paypal|openai|chatgpt|anthropic|claude|apple com|google|netflix|spotify|steam|github|vercel|supabase)\b/i;
+function paisExtranjero(g){
+  if(!g || g.importe>=0) return null;
+  if(g.monedaOrig && g.monedaOrig!=='EUR') return DIVISA_PAIS[g.monedaOrig]||g.monedaOrig;
+  const t=String(g.concepto||'')+' '+String(g.bancoConcepto||'');
+  if(ONLINE_RE.test(t) || g.cat==='suscripciones') return null;       // compras online en otra divisa no son un viaje
+  let m=t.match(/\(\s*[\d.,]+\s+([A-Z]{3})\s*\)\s*$/); if(m && m[1]!=='EUR') return DIVISA_PAIS[m[1]]||m[1];
+  m=t.trim().match(/(?:^|\s)([A-Z]{2})$/); if(m && PAIS_COD[m[1]]) return PAIS_COD[m[1]];
+  const n=norm(t); for(const c in CIUDADES_EXT) if(n.includes(' '+c+' ')) return CIUDADES_EXT[c];
+  return null;
+}
+function detectarViajes(gastos=D.gastos){
+  const a=D.ajustes||{}, hueco=a.viajeHueco||3, ign=new Set(a.viajesIgnorados||[]), nombres=a.viajesNombres||{};
+  const ext=gastos.filter(g=>g.fecha && catTipo(g.cat)!=='interno' && paisExtranjero(g)).sort((x,y)=>x.fecha<y.fecha?-1:x.fecha>y.fecha?1:0);
+  const grupos=[]; for(const g of ext){ const u=grupos.at(-1); if(u && diasEntre(u.at(-1).fecha,g.fecha)<=hueco) u.push(g); else grupos.push([g]); }
+  const viajes=[];
+  for(const gr of grupos){
+    const dias=new Set(gr.map(g=>g.fecha));
+    if(dias.size<2 && gr.length<3) continue;                      // un pago suelto no hace un viaje
+    const desde=gr[0].fecha, hasta=gr.at(-1).fecha; if(ign.has(desde)) continue;
+    const en=new Set(gr.map(g=>g.id));
+    // vuelos, hoteles y similares (categoría Viajes) pagados poco antes o durante el viaje
+    const cerca=gastos.filter(g=>!en.has(g.id) && g.importe<0 && g.cat==='viajes' && g.fecha>=sumDias(desde,-5) && g.fecha<=sumDias(hasta,1));
+    const gs=gr.concat(cerca).sort((x,y)=>x.fecha<y.fecha?-1:x.fecha>y.fecha?1:0);
+    const porCat={}; let total=0; for(const g of gs){ const v=-efectivo(g); total+=v; const k=g.cat||''; porCat[k]=(porCat[k]||0)+v; }
+    const cuenta={}; gr.forEach(g=>{ const p=paisExtranjero(g); cuenta[p]=(cuenta[p]||0)+1; });
+    const destinos=Object.entries(cuenta).sort((x,y)=>y[1]-x[1]).map(([p])=>p), destino=destinos.slice(0,2).join(' y ');
+    viajes.push({key:desde,desde,hasta,dias:diasEntre(desde,hasta)+1,gastos:gs,ids:new Set(gs.map(g=>g.id)),nExt:gr.length,total,porCat,destinos,
+      nombre:nombres[desde]||`${destino} · ${fmtMesL(desde.slice(0,7))}`,renombrado:!!nombres[desde]});
+  }
+  return viajes;
+}
+let VIAJES=[], VIAJE_DE=new Map();
+function renderViajes(){
+  const host=$('#gViajes'); if(!host) return;
+  VIAJES=detectarViajes(); VIAJE_DE=new Map(); VIAJES.forEach(v=>v.ids.forEach(id=>VIAJE_DE.set(id,v)));
+  const vs=VIAJES.slice().reverse();
+  const hueco=D.ajustes.viajeHueco||3;
+  const ajuste=`<label class="muted" style="font-size:12px">Un viaje termina tras <select id="vHueco" class="minisel" style="max-width:none;width:auto">${[2,3,5,7].map(n=>`<option value="${n}" ${n===hueco?'selected':''}>${n}</option>`).join('')}</select> días sin pagos fuera</label>`;
+  if(!vs.length){ host.innerHTML=`<div class="cardhead"><h2>Viajes</h2>${ajuste}</div><p class="muted" style="margin:0">Aún no he detectado viajes. Se reconocen por pagos en otra divisa o con país/ciudad extranjera en el concepto (al menos 2 días o 3 pagos seguidos).</p>`; }
+  else host.innerHTML=`<div class="cardhead"><h2>Viajes</h2>${ajuste}</div>
+    <div class="tablewrap"><table><thead><tr><th>Viaje</th><th>Fechas</th><th class="r">Días</th><th class="r">Total</th><th class="r">Por día</th><th>En qué</th><th></th></tr></thead><tbody>${vs.map(v=>{
+      const top=Object.entries(v.porCat).filter(([,x])=>x>0).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([id,x])=>`${esc(id?catNombre(id):'Sin categoría')} ${eur.format(x)}`).join(' · ');
+      return `<tr data-v="${v.key}"><td>✈️ <b>${esc(v.nombre)}</b></td><td class="num">${fmtFecha(v.desde)}${v.hasta!==v.desde?' – '+fmtFecha(v.hasta):''}</td><td class="r num">${v.dias}</td><td class="r num">${eur.format(v.total)}</td><td class="r num">${eur.format(v.total/v.dias)}</td><td class="muted" style="font-size:12.5px">${top}</td>
+      <td style="white-space:nowrap"><button class="btn sm" data-vver>Ver</button> <button class="btn sm" data-vren>Renombrar</button> <button class="btn sm" data-vno title="No es un viaje: lo quito de la lista">No es viaje</button></td></tr>`; }).join('')}</tbody></table></div>
+    <p class="muted" style="font-size:12px;margin:8px 0 0">Detectados por pagos en otra divisa o con país/ciudad extranjera. Incluye vuelos y hoteles (categoría Viajes) pagados hasta 5 días antes.</p>`;
+}
+document.addEventListener('click',async e=>{
+  const b=e.target.closest && e.target.closest('#gViajes [data-vver],#gViajes [data-vren],#gViajes [data-vno]'); if(!b) return;
+  const v=VIAJES.find(x=>x.key===b.closest('tr').dataset.v); if(!v) return;
+  if(b.matches('[data-vver]')){ gDesde=v.desde; gHasta=v.hasta; $('#gDesde').value=gDesde; $('#gHasta').value=gHasta; renderGastos(); $('#gTable').scrollIntoView({behavior:'smooth'}); return; }
+  if(b.matches('[data-vren]')){ const n=prompt('Nombre del viaje',v.nombre); if(n==null) return; if(n.trim()) D.ajustes.viajesNombres[v.key]=n.trim(); else delete D.ajustes.viajesNombres[v.key]; }
+  if(b.matches('[data-vno]')){ if(!confirm(`¿"${v.nombre}" no es un viaje? Dejará de aparecer en la lista.`)) return; D.ajustes.viajesIgnorados.push(v.key); }
+  await save(); renderGastos();
+});
+document.addEventListener('change',async e=>{ if(e.target.id==='vHueco'){ D.ajustes.viajeHueco=+e.target.value; await save(); renderGastos(); } });
 function renderGastos(){
   if(!D) return;
   const hayDatos=D.gastos.length>0;
@@ -2347,6 +2411,7 @@ function renderGastos(){
     comboChart($('#gIng'),{labels:mi.map(o=>({short:fmtMes(o.m),long:fmtMesL(o.m)})),a:mi.map(o=>o.r.ingreso),b:mi.map(o=>o.r.gasto),rate:mi.map(o=>o.r.ingreso>0?(o.r.ingreso-o.r.gasto)/o.r.ingreso:null),names:['Ingresos','Gastos','Tasa de ahorro'],colors:[css('--s3'),css('--s2'),css('--s1')]});
   }
   renderBizum(R,anual,etiqueta,meses);
+  renderViajes();
   // tabla de movimientos
   $('#gFiltro').innerHTML=`<option value="">Todas las categorías</option><option value="__sin" ${gFiltro==='__sin'?'selected':''}>Sin categoría</option>`+catOptions(gFiltro,null);
   const q=norm(gBuscar).trim();
@@ -2361,7 +2426,7 @@ function renderGastos(){
     $('#gMovTitle').textContent=`Movimientos (${lista.length})`+(porFecha||gMin!=null||gMax!=null||q||gFiltro||gCuentaF?` · neto ${sgn(n,eur2)}`:''); }
   $('#gTable').innerHTML = lista.length ? `<thead><tr><th>Fecha</th><th>Concepto</th><th>Cuenta / tarjeta</th><th>Categoría</th><th class="r">Importe <span class="muted" style="font-weight:400">(tu parte)</span></th><th></th></tr></thead><tbody>`+lista.map(g=>`<tr data-g="${g.id}" class="${catTipo(g.cat)==='interno'?'muted':''}">
       <td class="num">${fmtFecha(g.fecha)}${g.hora?` <span class="muted">${g.hora}</span>`:''}${g.fechaAprox?' <span class="muted" title="El Atajo no envió la fecha: se usó la del día de sincronización">(aprox.)</span>':''}</td>
-      <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis" title="${esc(g.bancoConcepto?g.concepto+' · banco: '+g.bancoConcepto:g.concepto)}">${esc(g.concepto)}</td>
+      <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis" title="${esc(g.bancoConcepto?g.concepto+' · banco: '+g.bancoConcepto:g.concepto)}">${VIAJE_DE.has(g.id)?`<span title="${esc('Viaje: '+VIAJE_DE.get(g.id).nombre)}">✈️</span> `:''}${esc(g.concepto)}</td>
       <td>${(o=>`<div style="white-space:nowrap">${logo(o.ent)}${esc(o.cuentaTxt)}</div>${o.medio?`<div class="muted" style="font-size:12px;padding-left:23px">${esc(o.medio)}</div>`:''}`)(origenGasto(g))}</td>
       <td><select class="minisel ${g.cat?'':'empty'}" data-cat aria-label="Categoría">${catOptions(g.cat)}</select></td>
       <td class="r num ${g.importe>0?'up':''}">${(p=>p<1?`<b>${eur2.format(efectivo(g))}</b><div class="muted" style="font-size:11.5px">${p?Math.round(p*100)+' % de '+eur2.format(g.importe):'no cuenta · '+eur2.format(g.importe)}</div>`:`<b>${eur2.format(g.importe)}</b>`)(parteDe(g))}</td>
@@ -2628,6 +2693,9 @@ function ensureExtras(d){
   if(a.recordatorioDia==null) a.recordatorioDia=25;
   if(!Array.isArray(a.objetivos)) a.objetivos=[{id:'fire',nombre:'Libertad financiera (FIRE)',tipo:'fire',gastoAnual:null,retiro:4,rent:5,base:'sinPP',aporte:null}];
   if(a.inflacion==null) a.inflacion=2.5;      // % anual esperada, para «€ constantes»
+  if(a.viajeHueco==null) a.viajeHueco=3;      // días máximos sin pagos en el extranjero para seguir en el mismo viaje
+  if(!a.viajesNombres) a.viajesNombres={};   // nombre puesto a mano a un viaje (clave: primer día)
+  if(!Array.isArray(a.viajesIgnorados)) a.viajesIgnorados=[];   // viajes detectados que no lo son (clave: primer día)
   if(a.escenarioPts==null) a.escenarioPts=2;  // puntos de rentabilidad que separan los escenarios pesimista/optimista
   if(!d.saldosBanco) d.saldosBanco={};
   if(!Array.isArray(d.pendientes)) d.pendientes=[];
