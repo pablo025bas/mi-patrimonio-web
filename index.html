@@ -627,7 +627,7 @@ const fmtFecha = f => { const [y,m,d]=f.split('-'); return `${+d} ${MESES[+m-1]}
 const toDate = f => new Date(f+'T12:00:00');
 const hoy = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
 // La pone automatico/publicar_web.py al publicar; en local es 'dev'
-const VERSION='493cbb58';
+const VERSION='9c24ba67';
 function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('show'),2600); }
 const uid = p => p+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 
@@ -3788,6 +3788,50 @@ function invPosMes(s,prevS){
   }
   return {rows,vendidas:[...prev].filter(([k])=>!vistas.has(k)).map(([,q])=>q)};
 }
+/* Diversificación «por dentro» (look-through): reparte cada fondo según sus sectores y regiones y cada acción en su sector */
+const INV_SECTORES=['Tecnología','Financiero','Salud','Industria','Consumo cíclico','Consumo defensivo','Comunicaciones','Energía','Materiales','Servicios públicos','Inmobiliario'];
+const INV_REG_MAP={China:'Emergentes',India:'Emergentes',Global:'Sin desglose'};
+// Referencia: índice mundial MSCI ACWI, aproximado (factsheet de agosto de 2026)
+const INV_REF={sectores:{'Tecnología':31.2,Financiero:17,Industria:10.5,'Consumo cíclico':9.5,Comunicaciones:8.5,Salud:8,'Consumo defensivo':5,'Energía':3.2,Materiales:3.2,'Servicios públicos':2.5,Inmobiliario:1.8},regiones:{EEUU:63.6,Europa:15,'Japón':4.8,'Asia-Pacífico':2.5,Emergentes:11,Otros:3}};
+const INV_ESTILOS={indexada:{n:'Fondos indexados',c:'--s1'},activa:{n:'Gestión activa',c:'--s7'},acciones:{n:'Acciones individuales',c:'--s2'},monetario:{n:'Monetario',c:'--s3'},retorno_absoluto:{n:'Retorno absoluto',c:'--s5'},renta_fija:{n:'Renta fija',c:'--s3'},oro:{n:'Oro',c:'--s4'},cripto:{n:'Cripto',c:'--s8'},efectivo:{n:'Efectivo',c:'--s6'}};
+// Fichas de exposición: la más reciente de cada fondo hasta ese cierre (no hace falta repetirlas cada mes)
+function invFichas(A,i){ const f={}; for(let k=0;k<=i;k++) Object.assign(f,A[k].s.exposicion||{}); return f; }
+const invEstilo = (p,f) => { const a=invActivo(p); if(a==='cripto') return 'cripto'; if(p.vehiculo==='accion') return 'acciones'; if(a!=='renta_variable') return a; return (p.gestion||f[p.isin||p.nombre]?.gestion)==='activa'?'activa':'indexada'; };
+function invExposicion(s,f){
+  const sec={}, reg={}; let rv=0, sinSec=0;
+  const reparte=(o,v,acc)=>{ const t=Object.values(o).reduce((a,x)=>a+x,0); if(t>0) for(const k in o) acc[k]=(acc[k]||0)+v*o[k]/t; };
+  for(const b of s.brokers) for(const p of b.posiciones||[]){
+    if(invActivo(p)!=='renta_variable') continue;
+    const v=p.valorEur||0, e=f[p.isin||p.nombre]||{}; rv+=v;
+    const S=e.sectores || (p.sector?{[p.sector]:1}:null); if(S) reparte(S,v,sec); else sinSec+=v;
+    const R=e.regiones || {[INV_REG_MAP[p.region]||p.region||'Sin desglose']:1}; const R2={}; for(const k in R){ const kk=INV_REG_MAP[k]||k; R2[kk]=(R2[kk]||0)+R[k]; } reparte(R2,v,reg);
+  }
+  return {rv,sec,reg,sinSec};
+}
+const diaSig = f => { const d=toDate(f); d.setDate(d.getDate()+1); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
+// Periodo del cierre: del cierre de patrimonio anterior (excluido) al de ese mes (incluido)
+function invPeriodo(s){
+  const R=regsOrd(), j=R.findIndex(r=>r.mes===s.mes);
+  if(j>=0) return {desde:j?R[j-1].fecha:null,hasta:R[j].fecha};
+  const hasta=invFecha(s), prev=R.filter(r=>r.fecha<hasta).at(-1); return {desde:prev?.fecha||null,hasta};
+}
+// Dinero que has movido a tus inversiones según tus movimientos bancarios: traspasos que mencionan un broker tuyo
+function invMovsBanco(desde,hasta){
+  const ents=entidadesInversion().map(e=>({e:e.entidad,k:norm(e.entidad).trim()})), esInv=new Set(ents.map(x=>x.e));
+  const porDest={}, compras=[], sinDestino=[]; let total=0;
+  // a tu nombre: dos palabras de un titular (como esTraspasoInterno)
+  const tits=(D.ajustes.titulares||[]).map(n=>norm(n).trim().split(' ').filter(w=>w.length>=3)).filter(ws=>ws.length);
+  const aTuNombre=t=>tits.some(ws=>ws.filter(w=>t.includes(' '+w+' ')).length>=Math.min(2,ws.length));
+  for(const g of D.gastos||[]){
+    if((desde && g.fecha<=desde) || g.fecha>hasta || catTipo(g.cat)!=='interno') continue;
+    const t=norm(g.concepto+' '+(g.bancoConcepto||'')), from=origenGasto(g).ent;
+    const d=ents.find(x=>x.e!==from && (t.includes(' '+x.k+' ') || (x.k.split(' ')[0].length>=5 && t.includes(' '+x.k.split(' ')[0]+' '))));
+    if(d){ const v=-g.importe; (porDest[d.e]=porDest[d.e]||{v:0,movs:[]}); porDest[d.e].v+=v; porDest[d.e].movs.push(g); total+=v; }
+    else if(esInv.has(from) && / (savings plan|buy trade|compra de valores|plan de inversion|round up|saveback) /.test(t)) compras.push(g);
+    else if(g.importe<=-50 && !g.par && !esInv.has(from) && aTuNombre(t)) sinDestino.push(g);
+  }
+  return {total,porDest,compras,sinDestino};
+}
 // Suma de las cuentas de esa entidad en el cierre de patrimonio del mes, para cuadrar
 function invEnCierre(mes,ent){
   const r=D.registros.find(r=>r.mes===mes), cs=r?D.cuentas.filter(c=>norm(c.entidad)===norm(ent) && r.saldos[c.id]!=null):[];
@@ -3810,6 +3854,10 @@ function invValidar(x){
     }
   }
   if(new Set(x.brokers.map(b=>norm(b.entidad))).size<x.brokers.length) throw new Error('Hay un broker repetido: junta sus posiciones en uno.');
+  if(x.exposicion!=null){
+    if(typeof x.exposicion!=='object'||Array.isArray(x.exposicion)) throw new Error('«exposicion» debe ser un objeto por ISIN.');
+    for(const [k,e] of Object.entries(x.exposicion)) for(const c of ['sectores','regiones']) if(e?.[c]!=null && (typeof e[c]!=='object' || Object.values(e[c]).some(v=>typeof v!=='number'||!isFinite(v)||v<0))) throw new Error(`Exposición de ${k}: «${c}» debe tener porcentajes numéricos.`);
+  }
   if(x.comentario!=null && typeof x.comentario!=='object') x.comentario={resumen:String(x.comentario)};
   return x;
 }
@@ -3859,7 +3907,7 @@ function renderInversiones(){
     return;
   }
   let i=A.findIndex(o=>o.s.mes===invSel); if(i<0){ i=A.length-1; invSel=A[i].s.mes; }
-  const o=A[i], P=i?A[i-1]:null, t=o.t, s=o.s;
+  const o=A[i], P=i?A[i-1]:null, t=o.t, s=o.s, fichas=invFichas(A,i);
   nav.innerHTML=`<button class="btn sm" data-d="-1" ${i<=0?'disabled':''} aria-label="Cierre anterior">‹</button><b>${fmtMesL(s.mes)}</b><button class="btn sm" data-d="1" ${i>=A.length-1?'disabled':''} aria-label="Cierre siguiente">›</button>`;
   nav.onclick=e=>{ const b=e.target.closest('button[data-d]'); if(!b||b.disabled) return; invSel=A[i+ +b.dataset.d].s.mes; renderInversiones(); };
   const fechas=s.brokers.map(b=>b.fecha).filter(Boolean).sort();
@@ -3886,8 +3934,16 @@ function renderInversiones(){
     <div class="grid kpis">${k.map(o=>`<div class="card kpi ${o.hero?'hero':''}"><div class="l">${o.l}</div><div class="v num">${o.v}</div><div class="d num">${o.d}</div></div>`).join('')}</div>
     <div class="grid two" style="margin-bottom:14px">
       <div class="card"><div class="cardhead"><h2>Evolución por broker</h2></div><div class="legend" id="lgInvEv"></div><div class="chart" id="chInvEv"></div></div>
-      <div class="card"><div class="cardhead"><h2>Reparto</h2><div class="seg" id="invVerSeg"><button data-v="activo">Tipo</button><button data-v="region">Región</button><button data-v="broker">Broker</button></div></div><div id="invDonut"></div><p class="muted" id="invDonutNote" style="font-size:12px;margin:8px 0 0"></p></div>
+      <div class="card"><div class="cardhead"><h2>Reparto</h2><div class="seg" id="invVerSeg"><button data-v="activo">Tipo</button><button data-v="estilo">Estilo</button><button data-v="broker">Broker</button></div></div><div id="invDonut"></div><p class="muted" id="invDonutNote" style="font-size:12px;margin:8px 0 0"></p></div>
     </div>
+    <div class="card" style="margin-bottom:14px"><div class="cardhead"><h2>Diversificación</h2><span class="muted" style="font-size:12px">tu renta variable por dentro de cada fondo</span></div>
+      <div class="grid kpis" id="invConc" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-bottom:12px"></div>
+      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr))">
+        <div><div class="muted" style="font-size:12.5px;font-weight:600;margin-bottom:4px">Por sector</div><div class="bars" id="invSec"></div></div>
+        <div><div class="muted" style="font-size:12.5px;font-weight:600;margin-bottom:4px">Por región</div><div class="bars" id="invReg"></div></div>
+      </div>
+      <p class="muted" id="invDivNote" style="font-size:12px;margin:10px 0 0"></p></div>
+    <div class="card" style="margin-bottom:14px" id="invAport"></div>
     <div class="grid two" style="margin-bottom:14px">
       <div class="card"><div class="cardhead"><h2>Rentabilidad de cada mes</h2><span class="muted" style="font-size:12px">sin contar tus aportaciones</span></div><div class="chart" id="chInvRent"></div></div>
       <div class="card"><div class="cardhead"><h2>Lo que más se ha movido</h2><span class="muted" style="font-size:12px">por precio, frente al cierre anterior</span></div><div class="movs" id="invMovs"></div></div>
@@ -3910,11 +3966,55 @@ function renderInversiones(){
   $('#invVerSeg').onclick=e=>{ const b=e.target.closest('button'); if(!b) return; invVer=b.dataset.v; renderInversiones(); };
   let items, nota='';
   if(invVer==='activo') items=Object.entries(t.activos).map(([a,v])=>({id:a,name:INV_ACTIVOS[a].n,v,color:css(INV_ACTIVOS[a].c)}));
-  else if(invVer==='region'){ const regs=Object.entries(t.regiones).sort((a,b)=>b[1]-a[1]); items=regs.map(([r,v],j)=>({id:r,name:r,v,color:css(INV_COLS[j%INV_COLS.length])})); nota='Solo la renta variable, según la región de cada fondo o acción.'; }
+  else if(invVer==='estilo'){
+    const est={}; s.brokers.forEach(b=>{ (b.posiciones||[]).forEach(p=>{ const k=invEstilo(p,fichas); est[k]=(est[k]||0)+p.valorEur; }); if(b.efectivo) est.efectivo=(est.efectivo||0)+b.efectivo; });
+    items=Object.entries(est).map(([k,v])=>({id:k,name:INV_ESTILOS[k]?.n||k,v,color:css(INV_ESTILOS[k]?.c||'--s6')}));
+    nota='Fondos indexados: replican un índice y son baratos. Gestión activa: un gestor elige las empresas (Cobas). Las acciones individuales concentran más riesgo en pocas empresas.';
+  }
   else items=s.brokers.map(b=>({id:b.entidad,name:b.entidad,v:t.brokers[b.entidad].total,color:colEnt(b.entidad)}));
   items=items.filter(x=>x.v>0).sort((a,b)=>b.v-a.v);
   if(items.length) donutChart($('#invDonut'),items,{centro:kfmt(Math.round(items.reduce((a,x)=>a+x.v,0)))+' €',sub:invVer==='region'?'renta variable':'total'}); else $('#invDonut').innerHTML='<p class="muted">Sin datos.</p>';
   $('#invDonutNote').textContent=nota;
+  // diversificación: concentración y exposición por dentro
+  const ex=invExposicion(s,fichas), todas=s.brokers.flatMap(b=>(b.posiciones||[]).map(p=>({p,b}))).sort((a,b)=>b.p.valorEur-a.p.valorEur);
+  const vTot=todas.reduce((a,x)=>a+x.p.valorEur,0), top10=todas.slice(0,10).reduce((a,x)=>a+x.p.valorEur,0), nEf=vTot?1/todas.reduce((a,x)=>a+(x.p.valorEur/vTot)**2,0):0;
+  const mayor=todas[0], estV={}; todas.forEach(x=>{ const k=invEstilo(x.p,fichas); estV[k]=(estV[k]||0)+x.p.valorEur; });
+  const kc=[
+    {l:'Mayor posición',v:mayor?pct(mayor.p.valorEur/t.total,0):'–',d:mayor?esc(mayor.p.nombre):''},
+    {l:'Las 10 mayores',v:pct(top10/t.total,0),d:`de ${todas.length} posiciones`},
+    {l:'Posiciones efectivas',v:nEf?nEf.toLocaleString('es-ES',{maximumFractionDigits:0}):'–',d:'<span title="Cuántas posiciones del mismo tamaño equivaldrían a tu reparto. Cuanto más alto, más diversificado.">equivalentes del mismo tamaño ⓘ</span>'},
+    {l:'Indexado / activo',v:`${pct((estV.indexada||0)/t.total,0)} / ${pct((estV.activa||0)/t.total,0)}`,d:`acciones sueltas ${pct((estV.acciones||0)/t.total,0)}`},
+  ];
+  $('#invConc').innerHTML=kc.map(k=>`<div><div class="muted" style="font-size:12.5px">${k.l}</div><div class="num" style="font-size:20px;font-weight:650">${k.v}</div><div class="muted" style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${k.d}</div></div>`).join('');
+  const barras=(acc,ref,orden)=>{
+    const filas=Object.entries(acc).filter(([,v])=>v>0.5).sort((a,b)=>orden?orden.indexOf(a[0])-orden.indexOf(b[0]):b[1]-a[1]);
+    if(!ex.rv) return '<p class="muted" style="margin:0">Sin renta variable.</p>';
+    const mx=Math.max(...filas.map(([,v])=>v/ex.rv*100),...Object.values(ref))||1;
+    return filas.map(([k,v])=>{ const w=v/ex.rv*100, r=ref[k];
+      return `<div class="row" title="${esc(k)}: ${eur.format(v)} (${pct(w/100)})${r!=null?' · índice mundial '+pct(r/100):''}"><span>${esc(k)}</span><div class="track"><div class="fill" style="width:${(w/mx*100).toFixed(1)}%;background:${css('--s1')}"></div>${r!=null?`<div class="hoy" style="left:${(r/mx*100).toFixed(1)}%"></div>`:''}</div><span class="num" style="text-align:right">${pct(w/100,1)}${r!=null?`<span class="pct">${Math.round(r)} %</span>`:''}</span></div>`; }).join('');
+  };
+  $('#invSec').innerHTML=barras(ex.sec,INV_REF.sectores,null)+(ex.sinSec>0.5?`<div class="row muted"><span>Sin dato</span><div></div><span class="num" style="text-align:right">${pct(ex.sinSec/ex.rv,1)}</span></div>`:'');
+  $('#invReg').innerHTML=barras(ex.reg,INV_REF.regiones,null);
+  $('#invDivNote').innerHTML=`Sobre ${eur.format(ex.rv)} de renta variable (sin monetario, oro, retorno absoluto, cripto ni efectivo). La raya y la cifra gris son el índice mundial MSCI ACWI (aprox., agosto 2026), como referencia de una cartera global neutra. El reparto dentro de cada fondo es aproximado: viene del índice que replica o de la ficha del fondo.`;
+  // lo que has invertido este mes, según tus bancos
+  const per=invPeriodo(s), mb=invMovsBanco(per.desde,per.hasta), gMin=(D.gastos||[]).map(g=>g.fecha).sort()[0];
+  const destinos=Object.entries(mb.porDest).sort((a,b)=>b[1].v-a[1].v), mxD=Math.max(1,...destinos.map(([,d])=>Math.abs(d.v)));
+  const movRow=g=>`<div class="it"><span class="muted">${fmtFecha(g.fecha)}</span><span title="${esc(g.concepto)}">${esc(origenGasto(g).cuentaTxt)} · ${esc(g.concepto)}</span><b class="num priv">${sgn(-g.importe,eur2)}</b></div>`;
+  const brkAp=s.brokers.filter(b=>b.aportacion!=null||b.movimientos?.some(m=>m.tipo==='aportacion'));
+  $('#invAport').innerHTML=`<div class="cardhead"><h2>Lo que has invertido este mes</h2><span class="muted" style="font-size:12px">${per.desde?`del ${fmtFecha(diaSig(per.desde))} al `:'hasta el '}${fmtFecha(per.hasta)} · según tus movimientos bancarios</span></div>
+    ${gMin&&per.desde&&per.desde<gMin?`<div class="hint">Tus movimientos empiezan el ${fmtFecha(gMin)}: este mes puede estar incompleto.</div>`:''}
+    <div class="grid two"><div>
+      <div class="num priv" style="font-size:24px;font-weight:650">${sgn(mb.total)}</div><div class="muted" style="font-size:12.5px;margin-bottom:10px">enviado a tus inversiones desde tus bancos</div>
+      ${destinos.length?`<div class="bars">${destinos.map(([e,d])=>`<div class="row"><span>${logo(e)}${esc(e)}</span><div class="track"><div class="fill" style="width:${(Math.abs(d.v)/mxD*100).toFixed(1)}%;background:var(${d.v>=0?'--s3':'--neg'})"></div></div><span class="num priv" style="text-align:right">${sgn(d.v)}</span></div>`).join('')}</div>
+        <div class="catdet"><div class="lst">${destinos.flatMap(([,d])=>d.movs).sort((a,b)=>a.fecha<b.fecha?-1:1).map(movRow).join('')}</div></div>`:'<p class="muted" style="margin:0">No hay traspasos a tus brokers en este periodo.</p>'}
+      ${mb.compras.length?`<p style="font-size:12.5px;margin:10px 0 4px"><b>Compras dentro de tus brokers</b> <span class="muted">(dinero que ya estaba en el broker)</span></p><div class="catdet"><div class="lst">${mb.compras.map(movRow).join('')}</div></div>`:''}
+      ${mb.sinDestino.length?`<p style="font-size:12.5px;margin:10px 0 4px"><b>Transferencias a tu nombre sin destino claro</b> <span class="muted">(si alguna fue a un broker, no cuenta arriba)</span></p><div class="catdet"><div class="lst">${mb.sinDestino.map(movRow).join('')}</div></div>`:''}
+      ${brkAp.length?`<p class="muted" style="font-size:12px;margin:10px 0 0">Según los brokers: ${brkAp.map(b=>`${esc(b.entidad)} ${b.aportacion!=null?sgn(b.aportacion):sgn(b.movimientos.filter(m=>m.tipo==='aportacion').reduce((a,m)=>a+m.importe,0))}`).join(' · ')} (incluye traspasos de fondos que no pasan por tu banco).</p>`:''}
+    </div><div><div class="muted" style="font-size:12.5px;font-weight:600;margin-bottom:4px">Cada mes</div><div class="chart" id="chInvAp"></div></div></div>`;
+  // historial: cada cierre de patrimonio cubierto por tus movimientos
+  const RR=regsOrd(), hist=[]; for(let j=1;j<RR.length;j++){ if(!gMin||RR[j-1].fecha<gMin) continue; hist.push({r:RR[j],v:invMovsBanco(RR[j-1].fecha,RR[j].fecha).total}); }
+  if(hist.length<2) $('#chInvAp').innerHTML='<p class="muted" style="margin:0">Cuando tengas más meses de movimientos importados verás aquí lo que inviertes cada mes.</p>';
+  else timeChart($('#chInvAp'),{x:hist.map(h=>h.r.fecha),series:[{name:'Invertido',color:css('--s3'),colorNeg:css('--neg'),vals:hist.map(h=>h.v)}],mode:'bar',labels:hist.map(h=>'Cierre de '+fmtMesL(h.r.mes)),height:200});
   // rentabilidad de cada mes
   const R=A.slice(1);
   if(!R.length) $('#chInvRent').innerHTML='<p class="muted">Necesita dos cierres de inversiones: con el próximo verás cuánto ha rendido cada mes, aparte de lo que aportas.</p>';
