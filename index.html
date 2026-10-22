@@ -638,7 +638,7 @@ const fmtFecha = f => { const [y,m,d]=f.split('-'); return `${+d} ${MESES[+m-1]}
 const toDate = f => new Date(f+'T12:00:00');
 const hoy = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
 // La pone automatico/publicar_web.py al publicar; en local es 'dev'
-const VERSION='888b35fb';
+const VERSION='888e2b95';
 function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('show'),2600); }
 const uid = p => p+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 
@@ -1062,7 +1062,8 @@ async function odElegir(){   // explorador de carpetas de tu OneDrive
     try{
       const base=dir.length?odItem(dir.join('/'))+':/children':'/me/drive/root/children';
       const r=await odFetch(base+'?$select=name,folder,file&$top=300'); if(!r.ok) throw await odErr(r); items=(await r.json()).value||[];
-    }catch(e){ if(e.login){ odPantallaInicio(); return; } act.innerHTML=`<p class="down">${esc(e instanceof TypeError?'Sin conexión':e.message)}</p><button class="btn" id="pRe">Reintentar</button>`; $('#pRe').onclick=pintar; return; }
+    }catch(e){ if(e.login){ odPantallaInicio(); return; } if(e.status===404 && dir.length){ dir=[]; ls.set('od_dir',''); return pintar(); }   // la carpeta guardada ya no existe: volver a la raíz
+      act.innerHTML=`<p class="down">${esc(e instanceof TypeError?'Sin conexión':e.message)}</p><button class="btn" id="pRe">Reintentar</button>`; $('#pRe').onclick=pintar; return; }
     const cmp=(x,y)=>x.name.localeCompare(y.name,'es');
     const carpetas=items.filter(i=>i.folder).sort(cmp), jsons=items.filter(i=>i.file && /\.json$/i.test(i.name)).sort(cmp);
     const hayDatos=jsons.some(j=>j.name.toLowerCase()==='datos.json');
@@ -3989,6 +3990,12 @@ function renderInversiones(){
   const colEnt=e=>css(INV_COLS[ents.indexOf(e)%INV_COLS.length]);
   const plus=t.valorConCoste-t.coste, anio=invAnio(A,i);
   const banc=invEfectivoBancos(s), efTot=t.efectivo+banc.total, todo=t.total+banc.total;   // con el efectivo de los bancos
+  const mon=t.activos.monetario||0, pMon=t.total?mon/t.total:0, pInv=t.total?(t.valores-mon)/t.total:0, pEf=t.total?t.efectivo/t.total:0;
+  // Remuneración del efectivo en broker (TAE aprox., oct 2026; MyInvestor: promo hasta 31/12/2026, Trade Republic: 3,04 % solo a nuevos clientes)
+  const TAE_EF=[['trade republic',.0253,'2,53 % TAE'],['myinvestor',.025,'2,50 % TAE']];
+  const remu=[]; const addRemu=(ent,v)=>{ const r=TAE_EF.find(x=>norm(ent).includes(x[0])); if(!r||!(v>0)) return; const q=remu.find(x=>x.k===r[0]); if(q) q.v+=v; else remu.push({k:r[0],e:ent,v,tae:r[1],txt:r[2]}); };
+  s.brokers.forEach(b=>addRemu(b.entidad,b.efectivo)); banc.cuentas.forEach(x=>addRemu(x.c.entidad,x.v));
+  const intAnual=remu.reduce((a,r)=>a+r.v*r.tae,0);
   const com=s.comentario;
   const ICO={bien:'✅',atencion:'⚠️',idea:'💡'};
   const k=[
@@ -4004,6 +4011,14 @@ function renderInversiones(){
       ${com.puntos?.length?`<ul>${com.puntos.map(p=>`<li><span aria-hidden="true">${ICO[p.tipo]||'•'}</span><span>${invTxt(p.texto)}</span></li>`).join('')}</ul>`:''}
       <p class="muted" style="font-size:11.5px;margin-top:10px">Comentario informativo, no es asesoramiento financiero.</p></div>`:''}
     <div class="grid kpis">${k.map(o=>`<div class="card kpi ${o.hero?'hero':''}"><div class="l">${o.l}</div><div class="v num">${o.v}</div><div class="d num">${o.d}</div></div>`).join('')}</div>
+    <div class="card" style="margin-bottom:14px"><div class="cardhead"><h2>Invertido y sin invertir</h2><span class="muted" style="font-size:12px">en tus brokers</span></div>
+      <div role="img" aria-label="${pct(pInv)} invertido, ${pct(pMon)} en fondo monetario, ${pct(pEf)} en efectivo" style="display:flex;height:14px;border-radius:7px;overflow:hidden;background:var(--surface-2);margin:2px 0 12px"><div style="width:${(pInv*100).toFixed(2)}%;background:var(--s1)"></div>${mon?`<div style="width:${(pMon*100).toFixed(2)}%;background:var(--s3)"></div>`:''}<div style="width:${(pEf*100).toFixed(2)}%;background:var(--s4)"></div></div>
+      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));margin:0">
+        <div><div class="muted" style="font-size:12.5px"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--s1);margin-right:6px"></span>Invertido (sin monetario)</div><div class="num" style="font-size:22px;font-weight:650">${eur.format(t.valores-mon)} <span class="muted" style="font-size:15px;font-weight:500">· ${pct(pInv)}</span></div></div>
+        ${mon?`<div><div class="muted" style="font-size:12.5px"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--s3);margin-right:6px"></span>Fondo monetario</div><div class="num" style="font-size:22px;font-weight:650">${eur.format(mon)} <span class="muted" style="font-size:15px;font-weight:500">· ${pct(pMon)}</span></div></div>`:''}
+        <div><div class="muted" style="font-size:12.5px"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--s4);margin-right:6px"></span>Sin invertir (efectivo)</div><div class="num" style="font-size:22px;font-weight:650">${eur.format(t.efectivo)} <span class="muted" style="font-size:15px;font-weight:500">· ${pct(pEf)}</span></div>${remu.length?`<div class="muted" style="font-size:12.5px;margin-top:6px">Cuentas remuneradas:</div>${remu.map(r=>`<div class="num" style="font-size:12.5px;margin-top:2px">${esc(r.e)}: ${eur.format(r.v)} al ${r.txt} → <span style="color:var(--pos)">≈ ${eur.format(r.v*r.tae)}/año</span></div>`).join('')}<div class="num" style="font-size:12.5px;margin-top:2px">Total ≈ <b style="color:var(--pos)">${eur.format(intAnual)}/año</b></div>`:''}</div>
+      </div>
+      <p class="muted" style="font-size:11.5px;margin:10px 0 0">Tipos orientativos de oct. 2026 según la prensa financiera; confírmalos en cada broker (tope remunerado y condiciones pueden variar).</p></div>
     <div class="grid two" style="margin-bottom:14px">
       <div class="card"><div class="cardhead"><h2>Evolución por broker</h2></div><div class="legend" id="lgInvEv"></div><div class="chart" id="chInvEv"></div></div>
       <div class="card"><div class="cardhead"><h2>Reparto <button class="linkbtn" id="invInfoBtn" aria-expanded="false" title="Qué es cada tipo" style="font-size:14px;font-weight:400">ⓘ</button></h2><div class="seg" id="invVerSeg"><button data-v="activo">Tipo</button><button data-v="broker">Broker</button></div></div>
