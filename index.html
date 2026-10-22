@@ -180,12 +180,28 @@ code{background:var(--surface-2);padding:1px 5px;border-radius:4px;font-size:12.
 .privbtn[aria-pressed="true"]{background:var(--text);color:var(--bg);border-color:var(--text)}
 .privbtn .ojo-off{display:none}.privbtn[aria-pressed="true"] .ojo-on{display:none}.privbtn[aria-pressed="true"] .ojo-off{display:inline}
 .priv{transition:filter .15s}
-html.privado .priv,html.privado .chart svg text,html.privado .tip,html.privado .kpi .v,html.privado input[inputmode="decimal"],html.privado .sticky .big{filter:blur(7px);user-select:none}
+html.privado .priv,html.privado .chart svg text,html.privado #invDonut svg text,html.privado .tip,html.privado .kpi .v,html.privado input[inputmode="decimal"],html.privado .sticky .big{filter:blur(7px);user-select:none}
 .drop{border:2px dashed var(--border);border-radius:12px;padding:16px;text-align:center;margin-bottom:14px;cursor:pointer;background:var(--surface);color:var(--text);font-size:13.5px}
 .drop:hover,.drop.over{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 7%,var(--surface))}
 .logo{width:16px;height:16px;border-radius:4px;vertical-align:-3px;margin-right:7px;object-fit:contain;background:#fff;flex:none;display:inline-block}
 .logo.ini{display:inline-flex;align-items:center;justify-content:center;font-size:9.5px;font-weight:700;color:var(--text-2);background:var(--surface-2);border:1px solid var(--border);box-sizing:border-box}
 .kpi.click:hover{border-color:var(--muted)}
+/* inversiones */
+.invcom{border-left:3px solid var(--accent);margin-bottom:14px}
+.invcom .tit{font-size:17px;font-weight:650;margin:0 0 6px;letter-spacing:-.01em}
+.invcom p{margin:0;color:var(--text-2)}
+.invcom p.tit{color:var(--text)}
+.invcom ul{list-style:none;padding:0;margin:12px 0 0;display:flex;flex-direction:column;gap:7px}
+.invcom li{display:grid;grid-template-columns:22px 1fr;gap:4px;font-size:13.5px}
+.movs .row{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(36px,1fr) 78px 52px;gap:10px;align-items:center;padding:4px 0;font-size:13px}
+.movs .row>span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.movs .track{height:8px;background:var(--surface-2);border-radius:4px;overflow:hidden}
+.movs .fill{height:100%;border-radius:4px}
+.movs h3{font-size:12.5px;color:var(--text-2);font-weight:600;margin:4px 0 2px}
+th.sort{cursor:pointer;user-select:none}th.sort:hover{color:var(--text)}
+td.pos{max-width:300px;overflow:hidden;text-overflow:ellipsis}
+td .isin{display:block;font-size:11px;color:var(--muted)}
+.pill.new{background:color-mix(in srgb,var(--pos) 14%,var(--surface));color:var(--pos)}
 @media (max-width:600px){
   .bars .row{grid-template-columns:90px 1fr 84px}
   .kpi .v{font-size:22px}.kpi.hero .v{font-size:26px}
@@ -207,7 +223,7 @@ nav .ti{display:none}nav .s{display:none}
   .privbtn span{display:none}.privbtn{padding:6px 9px}
   .status{max-width:58vw;overflow:hidden;white-space:nowrap}.status #statusTxt{overflow:hidden;text-overflow:ellipsis}
   nav#tabs{position:fixed;left:0;right:0;bottom:0;z-index:30;max-width:none;overflow:visible;border-radius:0;gap:0;
-    display:grid;grid-template-columns:repeat(7,1fr);padding:6px 4px calc(6px + env(safe-area-inset-bottom));
+    display:grid;grid-template-columns:repeat(8,1fr);padding:6px 4px calc(6px + env(safe-area-inset-bottom));
     background:color-mix(in srgb,var(--surface) 94%,transparent);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);border-top:1px solid var(--border)}
   nav#tabs button{display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px 0;font-size:10.5px;background:none;box-shadow:none;border-radius:8px;color:var(--muted)}
   nav#tabs button[aria-selected="true"]{background:none;box-shadow:none;color:var(--accent);font-weight:600}
@@ -237,6 +253,7 @@ nav .ti{display:none}nav .s{display:none}
     <nav id="tabs" role="tablist">
       <button data-tab="resumen" aria-selected="true"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V11M10 20V4M16 20v-6M22 20H2"/></svg><span>Resumen</span></button>
       <button data-tab="cierre"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg><span class="f">Nuevo cierre</span><span class="s">Cierre</span></button>
+      <button data-tab="inversiones"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9h-9z"/><path d="M15 3.5A9 9 0 0 1 20.5 9H15z"/></svg><span class="f">Inversiones</span><span class="s">Cartera</span></button>
       <button data-tab="gastos"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M3 10.5h18"/></svg><span>Gastos</span></button>
       <button data-tab="objetivos"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/></svg><span>Objetivos</span></button>
       <button data-tab="historico"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>Histórico</span></button>
@@ -458,6 +475,18 @@ nav .ti{display:none}nav .s{display:none}
       </details>
     </section>
 
+    <!-- INVERSIONES -->
+    <section data-view="inversiones" class="hidden">
+      <h1 id="invTitle">Inversiones</h1>
+      <p class="sub" id="invSub"></p>
+      <div class="toolbar" style="align-items:center;justify-content:space-between">
+        <div class="monthnav" id="invNav"></div>
+        <button class="btn primary" id="invImp">Importar cierre de inversiones</button>
+      </div>
+      <div id="invPrev"></div>
+      <div id="invBody"></div>
+    </section>
+
     <!-- OBJETIVOS -->
     <section data-view="objetivos" class="hidden">
       <h1>Objetivos</h1>
@@ -564,6 +593,7 @@ nav .ti{display:none}nav .s{display:none}
 <input type="file" id="fileInput" accept=".json,application/json" class="hidden">
 <input type="file" id="bankFileInput" accept=".pdf,.csv,.txt,.xlsx,.xls,.xlsm" multiple class="hidden">
 <input type="file" id="apFileInput" accept=".csv,.txt" class="hidden">
+<input type="file" id="invFileInput" accept=".json,application/json" class="hidden">
 
 <script>
 "use strict";
@@ -597,7 +627,7 @@ const fmtFecha = f => { const [y,m,d]=f.split('-'); return `${+d} ${MESES[+m-1]}
 const toDate = f => new Date(f+'T12:00:00');
 const hoy = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
 // La pone automatico/publicar_web.py al publicar; en local es 'dev'
-const VERSION='3e9e17ad';
+const VERSION='493cbb58';
 function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('show'),2600); }
 const uid = p => p+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 
@@ -732,7 +762,7 @@ async function copiaAuto(txt,etiqueta){
 function fusionarDatos(a,b){
   const aNuevo=(a.actualizado||'')>=(b.actualizado||''), base=aNuevo?a:b, otro=aNuevo?b:a;
   const out=JSON.parse(JSON.stringify(base)), cp=x=>JSON.parse(JSON.stringify(x));
-  for(const k of ['cuentas','registros','gastos','categorias','pendientes','importaciones']){
+  for(const k of ['cuentas','registros','gastos','categorias','pendientes','importaciones','inversiones']){
     if(!Array.isArray(otro[k])) continue; if(!Array.isArray(out[k])) out[k]=[];
     const m=new Map(out[k].map(x=>[x.id,x]));
     for(const x of otro[k]){
@@ -777,6 +807,11 @@ function validate(d){
   if(huerfanos) av.push(huerfanos+' saldo(s) pertenecen a cuentas que ya no existen');
   const mal=d.registros.filter(r=>!/^\d{4}-\d\d-\d\d$/.test(r.fecha||'')).length; if(mal) av.push(mal+' cierre(s) con fecha no válida');
   if(Array.isArray(d.gastos)){ d.gastos.forEach(g=>{ if(g && g.id==null) g.id=uid('g'); }); d.gastos=dedup(d.gastos,'gasto(s)'); }
+  if(Array.isArray(d.inversiones)){
+    const n0=d.inversiones.length; d.inversiones=d.inversiones.filter(s=>s && /^\d{4}-\d\d$/.test(s.mes||'') && Array.isArray(s.brokers));
+    if(d.inversiones.length<n0) av.push((n0-d.inversiones.length)+' cierre(s) de inversiones no válido(s) descartado(s)');
+    d.inversiones=invUnoPorMes(d.inversiones);   // dos dispositivos pueden haber importado el mismo mes con ids distintos
+  }
   ensureGastos(d); ensureExtras(d);
   if((d.version||1)<VERSION_DATOS) d.version=VERSION_DATOS;   // v2: inflación y escenarios en los ajustes (ver ensureExtras)
   return d;
@@ -1062,14 +1097,19 @@ async function boot(){
       if(p==='granted'){ try{ await useHandle(h); return; }catch(e){ console.warn(e); } }
       $('#connectMsg').innerHTML = `Pulsa para volver a abrir <b>${esc(h.name)}</b>. El navegador te pedirá permiso para editarlo.`;
       act.innerHTML = `<button class="btn primary" id="reBtn">Abrir ${esc(h.name)}</button><button class="linkbtn" id="otherBtn">Usar otro archivo</button>`;
-      $('#reBtn').onclick = async()=>{ try{ if(await h.requestPermission({mode:'readwrite'})==='granted') await useHandle(h); }catch(e){ alert('No se pudo abrir el archivo (¿lo has movido o renombrado?). Ábrelo de nuevo.'); pickFile(); } };
+      $('#reBtn').onclick = async()=>{ try{ if(await h.requestPermission({mode:'readwrite'})==='granted') await useHandle(h); }catch(e){
+        if(e.name==='NotFoundError'){ await idb.del('handle'); alert('«'+h.name+'» ya no está donde estaba (lo has movido o renombrado).\n\nAhora elige el archivo en su carpeta nueva de OneDrive.'); }
+        else alert('No se pudo abrir el archivo: '+e.message+'\n\nElígelo de nuevo.');
+        pickFile(); } };
       $('#otherBtn').onclick = pickFile;
     } else {
       act.innerHTML = `<button class="btn primary" id="openBtn">Abrir datos.json</button><button class="linkbtn" id="newBtn">Empezar con un archivo nuevo</button>`;
       $('#openBtn').onclick=pickFile; $('#newBtn').onclick=createFile;
     }
-    act.insertAdjacentHTML('beforeend',`<button class="linkbtn" id="odBtn">Conectar con OneDrive por internet</button>`); $('#odBtn').onclick=odPantallaInicio;
-    note.textContent = 'Tus datos nunca salen de tu equipo: la app lee y escribe el archivo directamente y OneDrive lo sincroniza.';
+    // Microsoft no acepta file:// como dirección de vuelta: el inicio de sesión solo funciona en la app publicada (https)
+    if(location.protocol!=='file:'){ act.insertAdjacentHTML('beforeend',`<button class="linkbtn" id="odBtn">Conectar con OneDrive por internet</button>`); $('#odBtn').onclick=odPantallaInicio; }
+    note.innerHTML = 'Tus datos nunca salen de tu equipo: la app lee y escribe el archivo directamente y OneDrive lo sincroniza.'
+      +(location.protocol==='file:'?'<br>Tu <b>datos.json</b> está en tu carpeta de datos de OneDrive, no junto a este archivo. Para iniciar sesión con Microsoft usa la app publicada en internet (no funciona abriendo este archivo).':'');
   } else {
     $('#connectMsg').innerHTML = 'Inicia sesión con tu cuenta de Microsoft para leer y guardar tus datos en tu OneDrive. Funciona en iPhone, iPad y cualquier navegador.';
     act.innerHTML = `<button class="btn primary" id="odBtn">Conectar con OneDrive</button><button class="linkbtn" id="loadBtn">Cargar un datos.json a mano (sin sincronizar)</button>`;
@@ -2699,6 +2739,7 @@ function ensureExtras(d){
   if(a.escenarioPts==null) a.escenarioPts=2;  // puntos de rentabilidad que separan los escenarios pesimista/optimista
   if(!d.saldosBanco) d.saldosBanco={};
   if(!Array.isArray(d.pendientes)) d.pendientes=[];
+  if(!Array.isArray(d.inversiones)) d.inversiones=[];   // cierres de inversiones (posiciones por broker), ver «Inversiones»
 }
 const TIPOS_REPARTO=['liquidez','renta_variable','renta_fija','cripto'];
 const TIPOS_INV_ENT=['renta_variable','renta_fija','cripto','pension'];
@@ -3684,6 +3725,253 @@ $('#pvHor').onclick=e=>{ const b=e.target.closest('button'); if(!b) return; pvHo
 
 /* ============ Navegación ============ */
 let current='resumen';
+/* ============ Inversiones: posiciones de cada broker, importadas en cada cierre ============ */
+// Cada cierre llega como un JSON (inversiones-AAAA-MM.json) con los brokers, sus posiciones y un comentario del mes.
+// Rentabilidades en fracción (0,004 = 0,4 %). «aportacion» es el dinero neto que entró en el broker desde fuera en el periodo.
+const INV_ACTIVOS={renta_variable:{n:'Renta variable',c:'--s2'},renta_fija:{n:'Renta fija',c:'--s3'},monetario:{n:'Monetario',c:'--s1'},retorno_absoluto:{n:'Retorno absoluto',c:'--s7'},oro:{n:'Oro',c:'--s4'},cripto:{n:'Cripto',c:'--s5'},efectivo:{n:'Efectivo',c:'--s6'}};
+const INV_COLS=['--s1','--s2','--s3','--s4','--s5','--s7','--s8','--s6'];
+const nfTit=new Intl.NumberFormat('es-ES',{maximumFractionDigits:4});
+let invSel=null, invVer='activo', invGrp='broker', invSort={k:'valor',dir:-1}, invPend=null;
+function invUnoPorMes(arr){ const m=new Map(); for(const s of arr){ const q=m.get(s.mes); if(!q||(s.importado||'')>=(q.importado||'')) m.set(s.mes,s); } return [...m.values()]; }
+const invOrd = () => invUnoPorMes(D.inversiones||[]).sort((a,b)=>a.mes<b.mes?-1:a.mes>b.mes?1:0);
+const invKey = (b,p) => norm(b.entidad)+'|'+(p.isin||norm(p.nombre));
+const invActivo = p => INV_ACTIVOS[p.activo]?p.activo:'renta_variable';
+const invValBroker = b => b.total ?? ((b.posiciones||[]).reduce((a,p)=>a+(p.valorEur||0),0)+(b.efectivo||0));
+// Fecha del cierre: la del cierre de patrimonio de ese mes o, si no lo hay, la del extracto más reciente
+function invFecha(s){ const r=D.registros.find(r=>r.mes===s.mes); return r?.fecha || s.brokers.map(b=>b.fecha).filter(Boolean).sort().at(-1) || s.mes+'-28'; }
+function invTotales(s){
+  const t={total:0,efectivo:0,valores:0,coste:0,valorConCoste:0,sinCoste:0,n:0,brokers:{},activos:{},regiones:{}};
+  for(const b of s.brokers){
+    const v=invValBroker(b), ef=b.efectivo||0, bt={total:v,efectivo:ef,valores:v-ef,coste:0,valorConCoste:0,n:(b.posiciones||[]).length};
+    for(const p of b.posiciones||[]){
+      const val=p.valorEur||0, act=invActivo(p);
+      t.activos[act]=(t.activos[act]||0)+val;
+      if(act==='renta_variable'){ const rg=p.region||'Global'; t.regiones[rg]=(t.regiones[rg]||0)+val; }
+      if(p.costeEur!=null){ bt.coste+=p.costeEur; bt.valorConCoste+=val; } else t.sinCoste++;
+    }
+    if(ef) t.activos.efectivo=(t.activos.efectivo||0)+ef;
+    t.brokers[b.entidad]=bt; t.total+=v; t.efectivo+=ef; t.valores+=v-ef; t.coste+=bt.coste; t.valorConCoste+=bt.valorConCoste; t.n+=bt.n;
+  }
+  return t;
+}
+// Rentabilidad de cada mes por broker y total (Dietz modificado, como analisisRent) y TWR encadenada
+function invAnalisis(){
+  const out=[]; let cum=1;
+  invOrd().forEach((s,i)=>{
+    const t=invTotales(s), p=i?out[i-1]:null, o={s,t,fecha:invFecha(s),aporte:null,rend:null,ret:null,porBroker:{},faltaAporte:false};
+    if(p){
+      let g=0,a=0,base=0;
+      for(const b of s.brokers){
+        const v1=t.brokers[b.entidad].total, v0=p.t.brokers[b.entidad]?.total||0, ap=b.aportacion||0, gg=v1-v0-ap, bb=v0+ap/2;
+        if(b.aportacion==null && v0) o.faltaAporte=true;
+        o.porBroker[b.entidad]={v0,v1,a:ap,g:gg,ret:bb>0?gg/bb:null}; g+=gg; a+=ap; base+=bb;
+      }
+      // un broker que ya no aparece se cuenta como retirada de todo su valor
+      for(const e in p.t.brokers) if(!t.brokers[e]){ const v0=p.t.brokers[e].total; o.porBroker[e]={v0,v1:0,a:-v0,g:0,ret:0}; a-=v0; base+=v0/2; }
+      o.aporte=a; o.rend=g; o.ret=base>0?g/base:null;
+      if(o.ret!=null) cum*=1+o.ret;
+    }
+    o.twr=cum-1; out.push(o);
+  });
+  return out;
+}
+const invAnio = (A,i) => { const y=A[i].s.mes.slice(0,4); let f=1, n=0; for(let k=1;k<=i;k++) if(A[k].s.mes.slice(0,4)===y && A[k].ret!=null){ f*=1+A[k].ret; n++; } return n?f-1:null; };
+// Variación de cada posición frente al cierre anterior, por precio (títulos del mes anterior × cambio del precio en euros)
+function invPosMes(s,prevS){
+  const prev=new Map(); if(prevS) for(const b of prevS.brokers) for(const p of b.posiciones||[]) prev.set(invKey(b,p),{b,p});
+  const rows=[], vistas=new Set();
+  for(const b of s.brokers) for(const p of b.posiciones||[]){
+    const k=invKey(b,p), q=prev.get(k); vistas.add(k);
+    let varEur=null, varPct=null;
+    if(q && q.p.titulos>0 && p.titulos>0 && q.p.valorEur){ const pu=p.valorEur/p.titulos, pu0=q.p.valorEur/q.p.titulos; varEur=q.p.titulos*(pu-pu0); varPct=pu/pu0-1; }
+    rows.push({b,p,k,nueva:!!prevS&&!q,varEur,varPct});
+  }
+  return {rows,vendidas:[...prev].filter(([k])=>!vistas.has(k)).map(([,q])=>q)};
+}
+// Suma de las cuentas de esa entidad en el cierre de patrimonio del mes, para cuadrar
+function invEnCierre(mes,ent){
+  const r=D.registros.find(r=>r.mes===mes), cs=r?D.cuentas.filter(c=>norm(c.entidad)===norm(ent) && r.saldos[c.id]!=null):[];
+  return cs.length ? cs.reduce((a,c)=>a+r.saldos[c.id],0) : null;
+}
+function invValidar(x){
+  const num=v=>v==null||(typeof v==='number'&&isFinite(v));
+  if(!x||typeof x!=='object'||Array.isArray(x)) throw new Error('El archivo no es un cierre de inversiones.');
+  if(!/^\d{4}-\d\d$/.test(x.mes||'')) throw new Error('Falta el mes del cierre (AAAA-MM).');
+  if(!Array.isArray(x.brokers)||!x.brokers.length) throw new Error('No trae ningún broker.');
+  for(const b of x.brokers){
+    if(!b||!b.entidad) throw new Error('Hay un broker sin entidad.');
+    if(b.posiciones==null) b.posiciones=[];
+    if(!Array.isArray(b.posiciones)) throw new Error(b.entidad+': «posiciones» debe ser una lista.');
+    for(const k of ['total','efectivo','aportacion','rentMes','rentAnio','rentOrigen']) if(!num(b[k])) throw new Error(`${b.entidad}: «${k}» no es un número.`);
+    if(b.fecha!=null && !/^\d{4}-\d\d-\d\d$/.test(b.fecha)) throw new Error(`${b.entidad}: la fecha debe ser AAAA-MM-DD.`);
+    for(const p of b.posiciones){
+      if(!p||!p.nombre||typeof p.valorEur!=='number'||!isFinite(p.valorEur)) throw new Error(b.entidad+': hay una posición sin nombre o sin valor en euros.');
+      for(const k of ['titulos','precio','costeEur']) if(!num(p[k])) throw new Error(`${b.entidad} · ${p.nombre}: «${k}» no es un número.`);
+    }
+  }
+  if(new Set(x.brokers.map(b=>norm(b.entidad))).size<x.brokers.length) throw new Error('Hay un broker repetido: junta sus posiciones en uno.');
+  if(x.comentario!=null && typeof x.comentario!=='object') x.comentario={resumen:String(x.comentario)};
+  return x;
+}
+// Guarda el cierre; si ya había uno de ese mes lo reemplaza conservando su id (así la fusión entre dispositivos no lo duplica)
+function invImportar(x){
+  x=invValidar(JSON.parse(JSON.stringify(x)));
+  if(!Array.isArray(D.inversiones)) D.inversiones=[];
+  const i=D.inversiones.findIndex(s=>s.mes===x.mes);
+  const rec={...x,id:i>=0?D.inversiones[i].id:uid('inv'),importado:new Date().toISOString().slice(0,19)};
+  if(i>=0) D.inversiones[i]=rec; else D.inversiones.push(rec);
+  D.inversiones=D.inversiones.filter((s,k)=>s===rec||s.mes!==x.mes);
+  return rec;
+}
+// Cifras dentro de un texto, envueltas para que «Ocultar importes» las difumine
+const invTxt = s => esc(s).replace(/([+−-]?\d[\d.,]*\s?(?:k?€|%))/g,'<span class="priv">$1</span>');
+function renderInvPrev(){
+  const el=$('#invPrev'); if(!el) return;
+  if(!invPend){ el.innerHTML=''; return; }
+  const x=invPend, t=invTotales(x), ya=(D.inversiones||[]).some(s=>s.mes===x.mes), hayCierre=D.registros.some(r=>r.mes===x.mes);
+  const filas=x.brokers.map(b=>{
+    const bt=t.brokers[b.entidad], c=invEnCierre(x.mes,b.entidad), d=c==null?null:bt.total-c;
+    return `<tr><td>${logo(b.entidad)}${esc(b.entidad)}</td><td>${b.fecha?fmtFecha(b.fecha):'—'}</td><td class="r num">${bt.n}</td><td class="r num priv">${eur2.format(bt.total)}</td><td class="r num priv">${c==null?'—':eur2.format(c)}</td><td class="r num priv ${d!=null&&Math.abs(d)>=1?'down':''}">${d==null?'':sgn(d,eur2)}</td></tr>`;
+  }).join('');
+  el.innerHTML=`<div class="card" style="margin-bottom:14px;border-color:var(--accent)">
+    <div class="cardhead"><h2>Importar el cierre de inversiones de ${fmtMesL(x.mes)}</h2></div>
+    ${ya?'<div class="hint">Ya tienes un cierre de inversiones de este mes: se reemplazará por este.</div>':''}
+    <div class="tablewrap"><table><thead><tr><th>Broker</th><th>Extracto</th><th class="r">Posiciones</th><th class="r">Total</th><th class="r">En tu cierre</th><th class="r">Diferencia</th></tr></thead>
+    <tbody>${filas}<tr class="tot"><td>Total</td><td></td><td class="r num">${t.n}</td><td class="r num priv">${eur2.format(t.total)}</td><td></td><td></td></tr></tbody></table></div>
+    <p class="muted" style="font-size:12px;margin:8px 0 12px">${hayCierre?`«En tu cierre» suma tus cuentas de cada entidad en el cierre de patrimonio de ${fmtMesL(x.mes)}. Si no cuadra, lo normal es que el extracto sea de otra fecha.`:`Aún no hay un cierre de patrimonio de ${fmtMesL(x.mes)} con el que cuadrarlo.`}</p>
+    <div style="display:flex;gap:8px"><button class="btn primary" id="invOk">Importar</button><button class="btn" id="invNo">Cancelar</button></div></div>`;
+  $('#invOk').onclick=async()=>{ const rec=invImportar(invPend); invPend=null; invSel=rec.mes; renderInvPrev(); renderInversiones(); await save(); toast('Cierre de inversiones importado'); };
+  $('#invNo').onclick=()=>{ invPend=null; renderInvPrev(); };
+}
+$('#invImp').onclick=()=>$('#invFileInput').click();
+$('#invFileInput').onchange=async e=>{
+  const f=e.target.files[0]; e.target.value=''; if(!f) return;
+  try{ invPend=invValidar(JSON.parse(await f.text())); renderInvPrev(); }
+  catch(err){ alert('No se puede importar '+f.name+':\n'+(err.message||err)); }
+};
+function renderInversiones(){
+  const host=$('#invBody'); if(!host||!D) return;
+  const A=invAnalisis(), nav=$('#invNav');
+  if(!A.length){
+    $('#invTitle').textContent='Inversiones'; $('#invSub').textContent=''; nav.innerHTML='';
+    host.innerHTML=`<div class="card"><h2>Tu cartera, posición a posición</h2><p class="muted" style="margin:0 0 8px">Aquí verás lo que tienes dentro de cada broker, cómo evoluciona mes a mes y un comentario de cómo ha ido el mes.</p>
+      <ol class="steps"><li>Cuando hagas el cierre, descarga los extractos de tus brokers (PDF o captura).</li><li>Pásaselos a Claude en Claude Code y pídele el «cierre de inversiones». Te dejará un archivo <code>inversiones-AAAA-MM.json</code> junto a tu <code>datos.json</code>.</li><li>Pulsa <b>Importar cierre de inversiones</b> y elige ese archivo.</li></ol></div>`;
+    return;
+  }
+  let i=A.findIndex(o=>o.s.mes===invSel); if(i<0){ i=A.length-1; invSel=A[i].s.mes; }
+  const o=A[i], P=i?A[i-1]:null, t=o.t, s=o.s;
+  nav.innerHTML=`<button class="btn sm" data-d="-1" ${i<=0?'disabled':''} aria-label="Cierre anterior">‹</button><b>${fmtMesL(s.mes)}</b><button class="btn sm" data-d="1" ${i>=A.length-1?'disabled':''} aria-label="Cierre siguiente">›</button>`;
+  nav.onclick=e=>{ const b=e.target.closest('button[data-d]'); if(!b||b.disabled) return; invSel=A[i+ +b.dataset.d].s.mes; renderInversiones(); };
+  const fechas=s.brokers.map(b=>b.fecha).filter(Boolean).sort();
+  $('#invTitle').textContent='Inversiones de '+fmtMesL(s.mes);
+  $('#invSub').textContent=`${s.brokers.length} broker${s.brokers.length>1?'s':''} · ${t.n} posiciones`+(fechas.length?` · extractos ${fechas[0]===fechas.at(-1)?'del '+fmtFecha(fechas[0]):'del '+fmtFecha(fechas[0])+' al '+fmtFecha(fechas.at(-1))}`:'');
+  // colores fijos por broker en todos los meses
+  const ents=[]; A.forEach(a=>a.s.brokers.forEach(b=>{ if(!ents.includes(b.entidad)) ents.push(b.entidad); }));
+  const colEnt=e=>css(INV_COLS[ents.indexOf(e)%INV_COLS.length]);
+  const plus=t.valorConCoste-t.coste, anio=invAnio(A,i);
+  const com=s.comentario;
+  const ICO={bien:'✅',atencion:'⚠️',idea:'💡'};
+  const k=[
+    {l:'Valor de tus inversiones',v:eur.format(t.total),d:P?`<span class="${cls(t.total-P.t.total)}">${sgn(t.total-P.t.total)}</span> vs. ${fmtMes(P.s.mes)}`:`${eur.format(t.valores)} invertido · ${eur.format(t.efectivo)} en efectivo`,hero:1},
+    {l:'Rentabilidad del mes',v:o.rend!=null?sgn(o.rend):'–',d:o.rend!=null?`<span class="${cls(o.ret)}">${pct(o.ret)}</span> · aportado ${sgn(o.aporte)}${o.faltaAporte?' <span title="Algún broker no trae la aportación del mes: se ha tomado como 0">ⓘ</span>':''}`:'Desde el segundo cierre de inversiones'},
+    {l:'Plusvalía latente',v:t.coste?sgn(plus):'–',d:t.coste?`<span class="${cls(plus)}">${pct(plus/t.coste)}</span> sobre ${eur.format(t.coste)} de coste${t.sinCoste?` · ${t.sinCoste} posiciones sin coste`:''}`:'Ningún extracto trae el coste'},
+    {l:'Rentabilidad '+s.mes.slice(0,4),v:anio!=null?pct(anio):'–',d:i?`Desde ${fmtMes(A[0].s.mes)}: <span class="${cls(o.twr)}">${pct(o.twr)}</span> (TWR)`:'Desde el segundo cierre de inversiones'},
+    {l:'Efectivo sin invertir',v:eur.format(t.efectivo),d:`${pct(t.total?t.efectivo/t.total:null)} del total`},
+  ];
+  const comis=s.brokers.filter(b=>b.comisiones);
+  host.innerHTML=`${com&&(com.titular||com.resumen||com.puntos?.length)?`<div class="card invcom">
+      ${com.titular?`<p class="tit">${invTxt(com.titular)}</p>`:''}${com.resumen?`<p>${invTxt(com.resumen)}</p>`:''}
+      ${com.puntos?.length?`<ul>${com.puntos.map(p=>`<li><span aria-hidden="true">${ICO[p.tipo]||'•'}</span><span>${invTxt(p.texto)}</span></li>`).join('')}</ul>`:''}
+      <p class="muted" style="font-size:11.5px;margin-top:10px">Comentario informativo, no es asesoramiento financiero.</p></div>`:''}
+    <div class="grid kpis">${k.map(o=>`<div class="card kpi ${o.hero?'hero':''}"><div class="l">${o.l}</div><div class="v num">${o.v}</div><div class="d num">${o.d}</div></div>`).join('')}</div>
+    <div class="grid two" style="margin-bottom:14px">
+      <div class="card"><div class="cardhead"><h2>Evolución por broker</h2></div><div class="legend" id="lgInvEv"></div><div class="chart" id="chInvEv"></div></div>
+      <div class="card"><div class="cardhead"><h2>Reparto</h2><div class="seg" id="invVerSeg"><button data-v="activo">Tipo</button><button data-v="region">Región</button><button data-v="broker">Broker</button></div></div><div id="invDonut"></div><p class="muted" id="invDonutNote" style="font-size:12px;margin:8px 0 0"></p></div>
+    </div>
+    <div class="grid two" style="margin-bottom:14px">
+      <div class="card"><div class="cardhead"><h2>Rentabilidad de cada mes</h2><span class="muted" style="font-size:12px">sin contar tus aportaciones</span></div><div class="chart" id="chInvRent"></div></div>
+      <div class="card"><div class="cardhead"><h2>Lo que más se ha movido</h2><span class="muted" style="font-size:12px">por precio, frente al cierre anterior</span></div><div class="movs" id="invMovs"></div></div>
+    </div>
+    <div class="card" style="margin-bottom:14px"><div class="cardhead"><h2>Por broker</h2></div><div class="tablewrap"><table id="invBrk"></table></div></div>
+    <div class="card" style="margin-bottom:14px"><div class="cardhead"><h2>Posiciones</h2><div class="seg" id="invGrpSeg"><button data-g="broker">Por broker</button><button data-g="activo">Por tipo</button><button data-g="">Todas</button></div></div><div class="tablewrap"><table id="invPos"></table></div><p class="muted" id="invVend" style="font-size:12.5px;margin:8px 0 0"></p></div>
+    ${comis.length?`<div class="card" style="margin-bottom:14px"><div class="cardhead"><h2>Comisiones</h2><span class="muted" style="font-size:12px">las que indica el broker</span></div><div class="tablewrap"><table><thead><tr><th>Broker</th><th class="r">Este mes</th><th class="r">En el año</th></tr></thead><tbody>${comis.map(b=>`<tr><td>${logo(b.entidad)}${esc(b.entidad)}</td><td class="r num priv">${b.comisiones.mes!=null?eur2.format(b.comisiones.mes):'—'}</td><td class="r num priv">${b.comisiones.anio!=null?eur2.format(b.comisiones.anio):'—'}</td></tr>`).join('')}</tbody></table></div></div>`:''}
+    <p class="muted" style="font-size:12px">La rentabilidad del mes descuenta lo que has aportado o retirado en cada broker (método Dietz modificado) y la del año encadena los meses (TWR). Cada broker se compara con su extracto anterior, aunque las fechas no coincidan. <button class="linkbtn" id="invDel">Borrar este cierre de inversiones</button></p>`;
+  // evolución
+  const evo=$('#chInvEv');
+  if(A.length<2){ $('#lgInvEv').innerHTML=''; evo.innerHTML='<p class="muted">Con el próximo cierre de inversiones verás aquí cómo evoluciona cada broker.</p>'; }
+  else {
+    const se=ents.map(e=>({name:e,color:colEnt(e),vals:A.map(a=>a.t.brokers[e]?.total||0)})).reverse();
+    legend($('#lgInvEv'),[...se].reverse());
+    timeChart(evo,{x:A.map(a=>a.fecha),series:se,mode:'stack',labels:A.map(a=>'Cierre de '+fmtMesL(a.s.mes)),height:250,
+      tipExtra:j=>`<div class="r" style="border-top:1px solid var(--border);margin-top:4px;padding-top:4px"><span>Total</span><b class="num">${eur.format(A[j].t.total)}</b></div>`});
+  }
+  // reparto
+  $$('#invVerSeg button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.v===invVer));
+  $('#invVerSeg').onclick=e=>{ const b=e.target.closest('button'); if(!b) return; invVer=b.dataset.v; renderInversiones(); };
+  let items, nota='';
+  if(invVer==='activo') items=Object.entries(t.activos).map(([a,v])=>({id:a,name:INV_ACTIVOS[a].n,v,color:css(INV_ACTIVOS[a].c)}));
+  else if(invVer==='region'){ const regs=Object.entries(t.regiones).sort((a,b)=>b[1]-a[1]); items=regs.map(([r,v],j)=>({id:r,name:r,v,color:css(INV_COLS[j%INV_COLS.length])})); nota='Solo la renta variable, según la región de cada fondo o acción.'; }
+  else items=s.brokers.map(b=>({id:b.entidad,name:b.entidad,v:t.brokers[b.entidad].total,color:colEnt(b.entidad)}));
+  items=items.filter(x=>x.v>0).sort((a,b)=>b.v-a.v);
+  if(items.length) donutChart($('#invDonut'),items,{centro:kfmt(Math.round(items.reduce((a,x)=>a+x.v,0)))+' €',sub:invVer==='region'?'renta variable':'total'}); else $('#invDonut').innerHTML='<p class="muted">Sin datos.</p>';
+  $('#invDonutNote').textContent=nota;
+  // rentabilidad de cada mes
+  const R=A.slice(1);
+  if(!R.length) $('#chInvRent').innerHTML='<p class="muted">Necesita dos cierres de inversiones: con el próximo verás cuánto ha rendido cada mes, aparte de lo que aportas.</p>';
+  else timeChart($('#chInvRent'),{x:R.map(a=>a.fecha),series:[{name:'Rentabilidad',color:css('--div-pos'),colorNeg:css('--div-neg'),vals:R.map(a=>a.rend)}],mode:'bar',labels:R.map(a=>'Cierre de '+fmtMesL(a.s.mes)),height:230,
+    tipExtra:j=>`<div class="r"><span>En %</span><b class="num">${pct(R[j].ret)}</b></div><div class="r"><span>Aportado</span><b class="num">${sgn(R[j].aporte)}</b></div><div class="r"><span>Acumulada</span><b class="num">${pct(R[j].twr)}</b></div>`});
+  // lo que más se ha movido
+  const {rows,vendidas}=invPosMes(s,P?.s), con=rows.filter(r=>r.varEur!=null);
+  if(!P) $('#invMovs').innerHTML='<p class="muted" style="margin:0">Con el próximo cierre verás qué posiciones han subido y bajado más.</p>';
+  else if(!con.length) $('#invMovs').innerHTML='<p class="muted" style="margin:0">No hay posiciones comparables con el cierre anterior.</p>';
+  else {
+    const mx=Math.max(...con.map(r=>Math.abs(r.varEur)))||1;
+    const fila=r=>`<div class="row"><span title="${esc(r.p.nombre)} · ${esc(r.b.entidad)}">${logo(r.b.entidad)}${esc(r.p.nombre)}</span><div class="track"><div class="fill" style="width:${(Math.abs(r.varEur)/mx*100).toFixed(1)}%;background:var(${r.varEur>=0?'--pos':'--neg'})"></div></div><b class="num priv r ${cls(r.varEur)}" style="text-align:right">${sgn(r.varEur)}</b><span class="num ${cls(r.varPct)}" style="text-align:right;font-size:12px">${pct(r.varPct)}</span></div>`;
+    const sube=con.filter(r=>r.varEur>0).sort((a,b)=>b.varEur-a.varEur).slice(0,5), baja=con.filter(r=>r.varEur<0).sort((a,b)=>a.varEur-b.varEur).slice(0,5);
+    $('#invMovs').innerHTML=(sube.length?`<h3>Suben</h3>${sube.map(fila).join('')}`:'')+(baja.length?`<h3 style="margin-top:10px">Bajan</h3>${baja.map(fila).join('')}`:'');
+  }
+  // por broker
+  $('#invBrk').innerHTML=`<thead><tr><th>Broker</th><th>Extracto</th><th class="r">Valor</th><th class="r">Peso</th><th class="r">Aportado mes</th><th class="r">Rentab. mes</th><th class="r">%</th><th class="r">Plusvalía</th><th class="r">Según el broker</th><th class="r">En tu cierre</th></tr></thead><tbody>`+
+    s.brokers.map(b=>{
+      const bt=t.brokers[b.entidad], pb=o.porBroker[b.entidad], pl=bt.coste?bt.valorConCoste-bt.coste:null, c=invEnCierre(s.mes,b.entidad), dif=c==null?null:bt.total-c;
+      const seg=[b.rentMes!=null?'mes '+pct(b.rentMes):'', b.rentAnio!=null?'año '+pct(b.rentAnio)+(b.benchmark?.anio!=null?` (índice ${pct(b.benchmark.anio)})`:''):''].filter(Boolean).join(' · ');
+      return `<tr><td>${logo(b.entidad)}<b>${esc(b.entidad)}</b></td><td class="muted">${b.fecha?fmtFecha(b.fecha):'—'}</td><td class="r num priv">${eur2.format(bt.total)}</td><td class="r num">${pct(t.total?bt.total/t.total:null)}</td>
+        <td class="r num priv">${pb?sgn(pb.a):''}</td><td class="r num priv ${pb?cls(pb.g):''}">${pb?sgn(pb.g):''}</td><td class="r num ${pb?cls(pb.ret):''}">${pb?pct(pb.ret):''}</td>
+        <td class="r num priv ${cls(pl)}">${pl!=null?sgn(pl)+` <span class="muted">${pct(pl/bt.coste)}</span>`:'<span class="muted">sin coste</span>'}</td>
+        <td class="r num">${seg||'—'}</td><td class="r num priv" title="${dif!=null&&Math.abs(dif)>=1?'Diferencia con el extracto: '+sgn(dif,eur2):''}">${c==null?'—':eur.format(c)+(Math.abs(dif)>=1?` <span class="${Math.abs(dif)>Math.max(50,bt.total*.01)?'down':'muted'}">(${sgn(dif)})</span>`:' ✓')}</td></tr>`;
+    }).join('')+`<tr class="tot"><td>Total</td><td></td><td class="r num priv">${eur2.format(t.total)}</td><td class="r num">100 %</td><td class="r num priv">${o.aporte!=null?sgn(o.aporte):''}</td><td class="r num priv ${cls(o.rend)}">${o.rend!=null?sgn(o.rend):''}</td><td class="r num ${cls(o.ret)}">${o.ret!=null?pct(o.ret):''}</td><td class="r num priv ${cls(plus)}">${t.coste?sgn(plus):''}</td><td></td><td></td></tr></tbody>`;
+  // posiciones
+  $$('#invGrpSeg button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.g===invGrp));
+  $('#invGrpSeg').onclick=e=>{ const b=e.target.closest('button'); if(!b) return; invGrp=b.dataset.g; renderInversiones(); };
+  const filas=[...rows.map(r=>({...r,act:invActivo(r.p)})), ...s.brokers.filter(b=>b.efectivo>0).map(b=>({b,p:{nombre:'Efectivo',valorEur:b.efectivo},act:'efectivo',varEur:null}))];
+  const plusDe=r=>r.p.costeEur!=null?r.p.valorEur-r.p.costeEur:null;
+  const KEY={nombre:r=>r.p.nombre.toLowerCase(),broker:r=>r.b.entidad.toLowerCase(),titulos:r=>r.p.titulos??-Infinity,valor:r=>r.p.valorEur,coste:r=>r.p.costeEur??-Infinity,plus:r=>plusDe(r)??-Infinity,plusp:r=>r.p.costeEur?plusDe(r)/r.p.costeEur:-Infinity,peso:r=>r.p.valorEur,mes:r=>r.varEur??-Infinity};
+  const kf=KEY[invSort.k]||KEY.valor;
+  filas.sort((a,b)=>{ const x=kf(a), y=kf(b); return (x<y?-1:x>y?1:0)*invSort.dir; });
+  const COLS=[['nombre','Posición'],['broker','Broker'],['titulos','Títulos','r'],['valor','Valor','r'],['coste','Coste','r'],['plus','Plusvalía','r'],['plusp','%','r'],['peso','Peso','r'],['mes','Mes','r']];
+  const fRow=r=>{ const p=r.p, pl=plusDe(r);
+    return `<tr><td class="pos" title="${esc(p.nombre)}">${esc(p.nombre)}${r.nueva?' <span class="pill new">nueva</span>':''}<span class="isin">${esc([p.isin,INV_ACTIVOS[r.act].n,r.act==='renta_variable'?p.region:''].filter(Boolean).join(' · '))}</span></td><td>${logo(r.b.entidad)}${esc(r.b.entidad)}</td>
+      <td class="r num priv">${p.titulos!=null?nfTit.format(p.titulos):''}</td><td class="r num priv">${eur2.format(p.valorEur)}</td><td class="r num priv">${p.costeEur!=null?eur2.format(p.costeEur):''}</td>
+      <td class="r num priv ${cls(pl)}">${pl!=null?sgn(pl,eur2):''}</td><td class="r num ${cls(pl)}">${pl!=null&&p.costeEur?pct(pl/p.costeEur):''}</td><td class="r num">${pct(t.total?p.valorEur/t.total:null)}</td>
+      <td class="r num priv ${cls(r.varEur)}" title="${r.varPct!=null?'Precio '+pct(r.varPct):''}">${r.varEur!=null?sgn(r.varEur):''}</td></tr>`; };
+  let body='';
+  if(invGrp){
+    const gk=r=>invGrp==='broker'?r.b.entidad:INV_ACTIVOS[r.act].n, grupos=new Map();
+    filas.forEach(r=>{ const g=gk(r); if(!grupos.has(g)) grupos.set(g,[]); grupos.get(g).push(r); });
+    [...grupos].sort((a,b)=>b[1].reduce((x,r)=>x+r.p.valorEur,0)-a[1].reduce((x,r)=>x+r.p.valorEur,0)).forEach(([g,rs])=>{
+      const v=rs.reduce((x,r)=>x+r.p.valorEur,0);
+      body+=`<tr class="grp"><td colspan="3">${invGrp==='broker'?logo(g):''}${esc(g)}</td><td class="r num priv">${eur2.format(v)}</td><td colspan="3"></td><td class="r num">${pct(t.total?v/t.total:null)}</td><td></td></tr>`+rs.map(fRow).join('');
+    });
+  } else body=filas.map(fRow).join('');
+  $('#invPos').innerHTML=`<thead><tr>${COLS.map(([k,n,c])=>`<th class="sort ${c||''}" data-k="${k}">${n}${invSort.k===k?(invSort.dir<0?' ↓':' ↑'):''}</th>`).join('')}</tr></thead><tbody>${body}<tr class="tot"><td colspan="3">Total</td><td class="r num priv">${eur2.format(t.total)}</td><td class="r num priv">${t.coste?eur2.format(t.coste):''}</td><td class="r num priv ${cls(plus)}">${t.coste?sgn(plus,eur2):''}</td><td></td><td class="r num">100 %</td><td></td></tr></tbody>`;
+  $('#invPos').onclick=e=>{ const th=e.target.closest('th[data-k]'); if(!th) return; const k=th.dataset.k; invSort= invSort.k===k?{k,dir:-invSort.dir}:{k,dir:['nombre','broker'].includes(k)?1:-1}; renderInversiones(); };
+  $('#invVend').innerHTML=vendidas.length?'Han salido de la cartera desde el cierre anterior: '+vendidas.map(q=>`<b>${esc(q.p.nombre)}</b> (${esc(q.b.entidad)})`).join(', ')+'.':'';
+  $('#invDel').onclick=async()=>{
+    if(!confirm(`¿Borrar el cierre de inversiones de ${fmtMesL(s.mes)}? No se puede deshacer (salvo desde el historial de versiones de OneDrive).`)) return;
+    D.inversiones=D.inversiones.filter(x=>x.mes!==s.mes); invSel=null; renderInversiones(); await save(); toast('Cierre de inversiones borrado');
+  };
+}
+
 function show(tab){
   current=tab;
   $$('#tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.tab===tab));
@@ -3692,9 +3980,10 @@ function show(tab){
   if(tab==='gastos'){ renderGastos(); apSync(false); setTimeout(bkAuto,800); }
   if(tab==='objetivos') renderObjetivos();
   if(tab==='prevision') renderPrevision();
+  if(tab==='inversiones'){ renderInvPrev(); renderInversiones(); }
 }
 $('#tabs').onclick=e=>{ const b=e.target.closest('button'); if(!b) return; if(b.dataset.tab==='cierre'){ openForm(); return; } show(b.dataset.tab); };
-function renderAll(){ renderResumen(); renderHistorico(); renderCuentas(); renderGastos(); renderObjetivos(); renderPrevision(); }
+function renderAll(){ renderResumen(); renderHistorico(); renderCuentas(); renderGastos(); renderObjetivos(); renderPrevision(); renderInversiones(); }
 function start(){
   $('#connect').classList.add('hidden'); $('#app').classList.remove('hidden'); renderAll(); show(current==='cierre'?'resumen':current); setTimeout(bkAuto,1500);
   // Al abrir la app desde el aviso de nómina (#cierre), directa al formulario del cierre
@@ -3703,7 +3992,7 @@ function start(){
 }
 // Si la app ya estaba abierta, el aviso le pide (desde el service worker) que abra el cierre
 navigator.serviceWorker?.addEventListener('message',e=>{ if(e.data?.accion==='cierre' && D && current!=='cierre') openForm(); });
-let rz; window.addEventListener('resize',()=>{ clearTimeout(rz); rz=setTimeout(()=>{ if(D&&current==='resumen') renderResumen(); if(D&&current==='gastos') renderGastos(); if(D&&current==='objetivos') renderObjetivos(); if(D&&current==='prevision') renderPrevision(); },150); });
+let rz; window.addEventListener('resize',()=>{ clearTimeout(rz); rz=setTimeout(()=>{ if(D&&current==='resumen') renderResumen(); if(D&&current==='gastos') renderGastos(); if(D&&current==='objetivos') renderObjetivos(); if(D&&current==='prevision') renderPrevision(); if(D&&current==='inversiones') renderInversiones(); },150); });
 
 applyTheme();
 boot().catch(e=>console.error(e)).finally(()=>$('#splash').classList.add('off'));
