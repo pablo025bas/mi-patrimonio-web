@@ -638,7 +638,7 @@ const fmtFecha = f => { const [y,m,d]=f.split('-'); return `${+d} ${MESES[+m-1]}
 const toDate = f => new Date(f+'T12:00:00');
 const hoy = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
 // La pone automatico/publicar_web.py al publicar; en local es 'dev'
-const VERSION='2a15b6db';
+const VERSION='888b35fb';
 function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('show'),2600); }
 const uid = p => p+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 
@@ -4085,10 +4085,10 @@ function renderInversiones(){
     return filas.map(([k,v])=>{ const w=v/ex.rv*100, r=ref[k];
       return `<div class="row" title="${esc(k)}: ${eur.format(v)} (${pct(w/100)})${r!=null?' · índice mundial '+pct(r/100):''}"><span>${esc(k)}</span><div class="track"><div class="fill" style="width:${(w/mx*100).toFixed(1)}%;background:${css('--s1')}"></div>${r!=null?`<div class="hoy" style="left:${(r/mx*100).toFixed(1)}%"></div>`:''}</div><span class="num" style="text-align:right">${pct(w/100,1)}${r!=null?`<span class="pct">${Math.round(r)} %</span>`:''}</span></div>`; }).join('');
   };
-  $('#invSec').innerHTML=barras(ex.sec,INV_REF.sectores,null)+(ex.sinSec>0.5?`<div class="row muted"><span>Falta la ficha</span><div></div><span class="num" style="text-align:right">${pct(ex.sinSec/ex.rv,1)}</span></div>`:'');
+  $('#invSec').innerHTML=barras(ex.sec,INV_REF.sectores,null)+(ex.sinSec>0.5?`<div class="row muted"><span>Sin sector</span><div></div><span class="num" style="text-align:right">${pct(ex.sinSec/ex.rv,1)}</span></div>`:'');
   $('#invReg').innerHTML=barras(ex.reg,INV_REF.regiones,null);
   $('#invRvNote').innerHTML=ex.rv?`<span class="priv">${eur.format(ex.rv)}</span> · ${pct(todo?ex.rv/todo:null,0)} de todo`:'';
-  $('#invFaltan').innerHTML=ex.faltan.length?`<div class="hint">Faltan las fichas de sectores de ${ex.faltan.length} fondo${ex.faltan.length>1?'s':''} (<span class="priv">${eur.format(ex.sinSec)}</span>): ${esc(ex.faltan.map(p=>p.nombre).join(', '))}. Si importaste una versión antigua del archivo, vuelve a importarlo; si no, pide que se añadan en el próximo cierre.</div>`:'';
+  $('#invFaltan').innerHTML=ex.faltan.length?`<div class="hint">Falta el sector de ${ex.faltan.length} posici${ex.faltan.length>1?'ones':'ón'} (<span class="priv">${eur.format(ex.sinSec)}</span>): ${esc(ex.faltan.map(p=>p.nombre).join(', '))}. Si importaste una versión antigua del archivo, vuelve a importarlo; si no, pide que se añadan en el próximo cierre.</div>`:'';
   $('#invDivNote').innerHTML=`Solo la renta variable tiene sector y región; el monetario, el oro, el retorno absoluto, la cripto y el efectivo no entran aquí. Cada fondo se reparte según su ficha (índice que replica o informe del fondo); cada acción, en su sector. La raya y la cifra gris son el índice mundial MSCI ACWI a ${fmtFecha(INV_REF.fecha)}, como referencia de una cartera global neutra.`;
   // lo que has invertido este mes, según tus bancos
   const per=invPeriodo(s), mb=invMovsBanco(per.desde,per.hasta), gMin=(D.gastos||[]).map(g=>g.fecha).sort()[0];
