@@ -635,7 +635,7 @@ const fmtFecha = f => { const [y,m,d]=f.split('-'); return `${+d} ${MESES[+m-1]}
 const toDate = f => new Date(f+'T12:00:00');
 const hoy = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
 // La pone automatico/publicar_web.py al publicar; en local es 'dev'
-const VERSION='a702ac80';
+const VERSION='18ab0e59';
 function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('show'),2600); }
 const uid = p => p+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 
@@ -1694,8 +1694,14 @@ function catDeRegla(texto,soloUsuario,importe=null){ const t=norm(texto); for(co
 // Queda «pendiente de clasificar» y no cuenta en gastos ni ingresos hasta que lo emparejes con otra cuenta, el correo le ponga nombre o lo clasifiques tú.
 const UMBRAL_PENDIENTE=100;
 const sinDetalle=g=>g.fuente==='Open Banking' && g.concepto==='(sin concepto)' && !g.bancoConcepto && Math.abs(g.importe)>=UMBRAL_PENDIENTE;
+// Operaciones de tu broker (compra/venta de valores, plan de inversión, saveback) y sus dividendos o intereses: el nombre del comercio que traen
+// («Compra de valores Booking Holdings») no debe mandar sobre lo que son, ni siquiera una regla tuya de ese comercio
+const OPERACION_BROKER=/ (savings plan|plan de inversion|saveback|round up|buy trade|sell trade|compra de valores|venta de valores) /;
+const INGRESO_BROKER=/ (dividendo|dividend|interest payment) /;
 function autoCat(g){
   const txt=g.concepto+' '+(g.bancoConcepto||'');
+  if(OPERACION_BROKER.test(norm(txt)) && catById('interno')){ g.cat='interno'; g.catFuente='traspaso'; g.auto=true; return; }
+  if(g.importe>0 && INGRESO_BROKER.test(norm(txt)) && catById('ingresos')){ g.cat='ingresos'; g.catFuente='regla'; g.auto=true; return; }
   let c=catDeRegla(txt,true,g.importe), f='regla';                      // 1) reglas que has creado tú
   if(!c && sinDetalle(g)){ c='pendiente'; f='pendiente'; }              // 1b) grande y sin concepto: pendiente de clasificar
   if(!c && esTraspasoInterno(g)){ c='interno'; f='traspaso'; } // 2) transferencias entre tus cuentas
