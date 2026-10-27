@@ -635,7 +635,7 @@ const fmtFecha = f => { const [y,m,d]=f.split('-'); return `${+d} ${MESES[+m-1]}
 const toDate = f => new Date(f+'T12:00:00');
 const hoy = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
 // La pone automatico/publicar_web.py al publicar; en local es 'dev'
-const VERSION='32d1dade';
+const VERSION='937c7758';
 function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('show'),2600); }
 const uid = p => p+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 
@@ -2922,16 +2922,20 @@ function renderRent(){
   }
 }
 // Sugerencia de aportación a partir de los traspasos (categoría «Entre mis cuentas») entre dos cierres
-function sugerenciaAporte(entidad,desde,hasta){
+// Aportación de una entidad entre dos cierres: primero el extracto del propio broker (cierre de inversiones del mes) y, si no hay, los traspasos de tus bancos
+function calcAporte(entidad,desde,hasta){
   const k=norm(entidad).trim(), k1=k.split(' ')[0];
-  let s=0,n=0;
-  for(const g of D.gastos){
+  const s=(D.inversiones||[]).find(x=>x.mes===hasta.slice(0,7)), b=s&&s.brokers.find(b=>norm(b.entidad).trim()===k);
+  if(b && typeof b.aportacion==='number') return {v:b.aportacion,src:'extracto del broker',movs:[]};
+  let v=0; const movs=[];
+  for(const g of D.gastos||[]){
     if((desde && g.fecha<=desde) || g.fecha>hasta || catTipo(g.cat)!=='interno') continue;
     const t=norm(g.concepto+' '+(g.bancoConcepto||''));
-    if(t.includes(' '+k+' ') || (k1.length>=5 && t.includes(' '+k1+' '))){ s-=g.importe; n++; }
+    if(t.includes(' '+k+' ') || (k1.length>=5 && t.includes(' '+k1+' '))){ v-=g.importe; movs.push(g); }
   }
-  return n?Math.round(s*100)/100:null;
+  return movs.length?{v:Math.round(v*100)/100,src:'traspasos de tus bancos',movs}:null;
 }
+const sugerenciaAporte = (entidad,desde,hasta) => { const a=calcAporte(entidad,desde,hasta); return a?a.v:null; };
 
 /* ----- Extras del formulario de cierre ----- */
 let autoHandle=null, autoData=null;
@@ -2964,20 +2968,33 @@ async function formExtras(rec,prev){
   const ents=entidadesInversion().filter(e=>e.cuentas.some(c=>c.activa || (rec && rec.saldos[c.id]!=null)));
   const on = rec ? !!rec.aportes : true;
   const desde=prev?prev.fecha:null;
+  // valor y nota de una entidad calculados desde los extractos (null si no hay nada)
+  const deExtractos=e=>{
+    const a=calcAporte(e.entidad,desde,fecha);
+    if(a) return {val:nf2.format(a.v),nota:'según '+a.src,tip:a.movs.map(g=>`${fmtFecha(g.fecha)} · ${g.concepto} · ${nf2.format(-g.importe)}`).join('\n')};
+    if(e.cuentas.some(c=>c.tipo==='pension') && prev && prev.aportes && prev.aportes[e.entidad]) return {val:nf2.format(prev.aportes[e.entidad]),nota:'igual que el mes anterior',tip:''};
+    return null;
+  };
+  const sinDest=invMovsBanco(desde,fecha).sinDestino, sdTot=sinDest.reduce((a,g)=>a-g.importe,0);
   $('#fAportes').innerHTML=`<div class="cardhead"><h2>Aportaciones del mes</h2><label style="font-size:13px;display:flex;gap:6px;align-items:center"><input type="checkbox" id="fApOn" ${on?'checked':''}> Registrar aportaciones en este cierre</label></div>
-    <p class="muted" style="margin-top:0;font-size:12.5px">Dinero que has <b>metido (+)</b> o <b>sacado (−)</b> de cada inversión desde el cierre anterior (${desde?fmtFecha(desde):'—'}). No incluyas lo que ha subido o bajado el mercado: eso lo calcula la app. Si no has aportado nada, déjalo vacío.</p>
+    <p class="muted" style="margin-top:0;font-size:12.5px">Dinero que has <b>metido (+)</b> o <b>sacado (−)</b> de cada inversión desde el cierre anterior (${desde?fmtFecha(desde):'—'}). Se calcula solo con tus extractos (el del broker y los traspasos de tus bancos); lo que ha subido o bajado el mercado lo calcula la app. <button class="linkbtn" id="fApCalc" type="button">Recalcular desde extractos</button></p>
+    ${sinDest.length?`<p class="muted" style="font-size:12.5px;margin:0 0 8px">⚠️ Hay ${sinDest.length} transferencia(s) a tu nombre sin destino claro (${eur.format(sdTot)}). Si eran a un broker, ponles su nombre en el concepto o súmalas aquí a mano.</p>`:''}
     <div class="formgrid" id="fApRows" style="${on?'':'opacity:.45;pointer-events:none'}">${ents.map(e=>{
-      let val='', nota='';
+      let val='', nota='', tip='';
       if(rec && rec.aportes && rec.aportes[e.entidad]!=null) val=nf2.format(rec.aportes[e.entidad]);
-      else if(!rec){
-        const s=sugerenciaAporte(e.entidad,desde,fecha);
-        if(s!=null){ val=nf2.format(s); nota='según tus extractos'; }
-        else if(e.cuentas.some(c=>c.tipo==='pension') && prev && prev.aportes && prev.aportes[e.entidad]){ val=nf2.format(prev.aportes[e.entidad]); nota='igual que el mes anterior'; }
-      }
-      return `<div class="acc" data-ent="${esc(e.entidad)}" style="border-top:0"><div><div class="n">${logo(e.entidad)}${esc(e.entidad)}</div><div class="p">${nota?`<span style="color:var(--accent)">${nota}</span>`:e.cuentas.map(c=>esc(c.nombre===e.entidad?'':c.nombre)).filter(Boolean).join(', ')}</div></div><input inputmode="decimal" autocomplete="off" placeholder="0" value="${val}" aria-label="Aportación ${esc(e.entidad)}"><div class="dl"></div></div>`;
+      else if(!rec){ const s=deExtractos(e); if(s) ({val,nota,tip}=s); }
+      return `<div class="acc" data-ent="${esc(e.entidad)}" style="border-top:0"><div><div class="n">${logo(e.entidad)}${esc(e.entidad)}</div><div class="p" data-sub="${esc(e.cuentas.map(c=>c.nombre===e.entidad?'':c.nombre).filter(Boolean).join(', '))}">${nota?`<span class="apn" style="color:var(--accent)" title="${esc(tip)}">${esc(nota)}</span>`:e.cuentas.map(c=>esc(c.nombre===e.entidad?'':c.nombre)).filter(Boolean).join(', ')}</div></div><input inputmode="decimal" autocomplete="off" placeholder="0" value="${val}" aria-label="Aportación ${esc(e.entidad)}"><div class="dl"></div></div>`;
     }).join('')}</div>`;
   $('#fAportes').classList.toggle('hidden',!ents.length);
   $('#fApOn').onchange=e=>{ const r=$('#fApRows'); r.style.opacity=e.target.checked?'':'.45'; r.style.pointerEvents=e.target.checked?'':'none'; };
+  $('#fApCalc').onclick=()=>{
+    $$('#fApRows .acc').forEach(row=>{
+      const e=ents.find(x=>x.entidad===row.dataset.ent), s=e&&deExtractos(e), p=row.querySelector('.p');
+      row.querySelector('input').value=s?s.val:'';
+      p.innerHTML=s?`<span class="apn" style="color:var(--accent)" title="${esc(s.tip)}">${esc(s.nota)}</span>`:esc(p.dataset.sub);
+    });
+    $('#fApOn').checked=true; $('#fApOn').onchange({target:$('#fApOn')});
+  };
   $('#fAutoInfo').textContent='';
   if(rec) return;
   // Saldos: extractos, automáticos y pendientes de cobro (solo en cierres nuevos)
