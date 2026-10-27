@@ -490,6 +490,7 @@ nav .ti{display:none}nav .s{display:none}
         <button class="btn primary" id="invImp">Importar cierre de inversiones</button>
       </div>
       <div id="invPrev"></div>
+      <div id="invCorreo"></div>
       <div id="invBody"></div>
     </section>
 
@@ -635,7 +636,7 @@ const fmtFecha = f => { const [y,m,d]=f.split('-'); return `${+d} ${MESES[+m-1]}
 const toDate = f => new Date(f+'T12:00:00');
 const hoy = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
 // La pone automatico/publicar_web.py al publicar; en local es 'dev'
-const VERSION='937c7758';
+const VERSION='160dc3fe';
 function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('show'),2600); }
 const uid = p => p+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 
@@ -1911,6 +1912,37 @@ Revisa el Atajo: en «Formatear fecha», el formato debe ser «Personalizado» c
   renderGastos();
 }
 
+/* ----- Avisos de tus entidades (Indexa, MyInvestor, BBVA): los recoge del correo correo_documentos.py y van dentro de movimientos-auto.json ----- */
+let entidadesAviso=[];
+function renderAvisosEntidades(){
+  const host=$('#invCorreo'); if(!host) return;
+  const E=entidadesAviso;
+  if(!E.length){ host.innerHTML=''; return; }
+  const hace=n=>{ const d=new Date(); d.setDate(d.getDate()-n); return d.toISOString().slice(0,10); };
+  const nuevoPrimero=(a,b)=>a.fecha<b.fecha?1:a.fecha>b.fecha?-1:0;
+  const ult=new Map();
+  for(const e of E.filter(e=>e.tipo==='informe_mensual')){ const k=e.entidad+'|'+e.cuenta, q=ult.get(k); if(!q||e.fecha>q.fecha) ult.set(k,e); }
+  const informes=[...ult.values()].sort(nuevoPrimero);
+  const OP={suscripcion:'Suscripción',compra:'Compra',venta:'Venta',reembolso:'Reembolso'};
+  const ops=E.filter(e=>e.tipo==='operacion_fondos' && e.importe!=null && e.fecha>=hace(90)).sort(nuevoPrimero);
+  const intereses=E.filter(e=>e.tipo==='intereses' && e.fecha>=hace(90));
+  const aportesIndexa=E.filter(e=>e.tipo==='aportacion' && e.fecha>=hace(90)).length;
+  const venc=E.filter(e=>e.tipo==='vencimiento_deposito' && e.fecha>=hace(30)).sort(nuevoPrimero)[0];
+  const bonif=E.filter(e=>e.tipo==='bonificacion_plan760').sort(nuevoPrimero)[0];
+  const ultima=E.map(e=>e.fecha).sort().at(-1);
+  const filaInforme=e=>`<tr><td>${esc(e.entidad)} · ${esc(e.cuenta||'')}</td><td>${fmtFecha(e.fecha)}</td><td class="num">${eur.format(e.valor)}</td><td class="num">${e.aportaciones_netas!=null?eur.format(e.aportaciones_netas):'–'}</td><td class="num ${cls(e.rentabilidad_acumulada)}">${e.rentabilidad_acumulada!=null?sgn(e.rentabilidad_acumulada):'–'}</td><td class="num ${cls(e.rentabilidad_mes)}">${e.rentabilidad_mes!=null?sgn(e.rentabilidad_mes):'–'}</td></tr>`;
+  const lineas=[];
+  if(intereses.length) lineas.push(`Intereses cobrados en MyInvestor (90 días): <b class="num">${nf2.format(intereses.reduce((a,e)=>a+e.importe,0))} €</b>`);
+  if(aportesIndexa) lineas.push(`${aportesIndexa} aportaci${aportesIndexa>1?'ones':'ón'} a Indexa en los últimos 90 días`);
+  if(venc) lineas.push(`Depósito de MyInvestor vencido el ${fmtFecha(venc.fecha)}: los intereses llegan a tu cuenta asociada`);
+  if(bonif) lineas.push(`Promoción Plan 760 de BBVA: <b class="num">${nf2.format(bonif.bonificacion_mes)} €</b> este mes · ${nf2.format(bonif.bonificacion_acumulada)} € acumulados`);
+  host.innerHTML=`<details class="card" style="margin-bottom:14px" open><summary><b>Avisos de tus entidades</b> <span class="muted" style="font-size:12px">· del correo${ultima?', último aviso del '+fmtFecha(ultima):''}</span></summary>
+    ${informes.length?`<div class="tablewrap" style="margin-top:10px"><table><thead><tr><th>Cuenta de fondos</th><th>Informe a</th><th>Valor</th><th>Aportado</th><th>Rentab. acumulada</th><th>Rentab. del mes</th></tr></thead><tbody>${informes.map(filaInforme).join('')}</tbody></table></div>`:''}
+    ${ops.length?`<div class="muted" style="font-size:12.5px;font-weight:600;margin:14px 0 4px">Operaciones de fondos en MyInvestor · últimos 90 días</div><div class="tablewrap"><table><tbody>${ops.slice(0,15).map(e=>`<tr><td>${fmtFecha(e.fecha)}</td><td>${esc(OP[e.operacion]||e.operacion)}</td><td>${esc(e.producto)}</td><td class="num">${nf2.format(e.importe)} €</td></tr>`).join('')}</tbody></table></div>${ops.length>15?`<p class="muted" style="font-size:12px;margin:4px 0 0">y ${ops.length-15} más</p>`:''}`:''}
+    ${lineas.length?`<ul style="margin:12px 0 0;padding-left:18px;font-size:13.5px">${lineas.map(l=>`<li>${l}</li>`).join('')}</ul>`:''}
+    <p class="muted" style="font-size:11.5px;margin:10px 0 0">Datos leídos de los correos de tus entidades; el valor y la rentabilidad de Indexa son los del último cierre de mes. Los PDF se guardan en la carpeta <code>documentos</code>.</p></details>`;
+}
+
 /* ----- Sincronizar bancos (Open Banking): movimientos-auto.json, generado en el PC por actualizar_movimientos.py ----- */
 let bkHandle=null;
 async function bkLeer(interactivo=true){
@@ -1954,6 +1986,7 @@ async function bkSync(interactivo=true){
   try{ datos=await bkLeer(interactivo); }
   catch(e){ if(e.name==='AbortError') return; if(e.name==='NotFoundError') bkHandle=null; if(!interactivo) return; alert('No se pudo leer movimientos-auto.json: '+(e instanceof TypeError?'sin conexión':e.message)); return; }
   if(!datos){ if(interactivo) alert('No encuentro movimientos-auto.json. Ejecuta antes «Actualizar movimientos.bat» en el PC (está en la carpeta de la app).'); return; }
+  if(Array.isArray(datos.entidades)){ entidadesAviso=datos.entidades; renderAvisosEntidades(); }
   const avisosBk=[...(datos.avisos||[]),...(datos.errores||[]).map(e=>'Error en la última descarga: '+e)];
   if(avisosBk.length){ if(interactivo) setTimeout(()=>alert('Bancos:\n\n'+avisosBk.join('\n\n')),400); else toast('Bancos: '+avisosBk[0]); }
   let ac=aplicarAjustesYCorreo(datos);      // antes de buscar duplicados: un ajuste ya resuelto no debe tapar a su movimiento real
@@ -4122,6 +4155,7 @@ $('#invFileInput').onchange=async e=>{
 };
 function renderInversiones(){
   const host=$('#invBody'); if(!host||!D) return;
+  renderAvisosEntidades();
   const A=invAnalisis(), nav=$('#invNav');
   if(!A.length){
     $('#invTitle').textContent='Inversiones'; $('#invSub').textContent=''; nav.innerHTML='';
