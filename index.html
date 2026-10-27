@@ -637,7 +637,7 @@ const fmtFecha = f => { const [y,m,d]=f.split('-'); return `${+d} ${MESES[+m-1]}
 const toDate = f => new Date(f+'T12:00:00');
 const hoy = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
 // La pone automatico/publicar_web.py al publicar; en local es 'dev'
-const VERSION='271dd13c';
+const VERSION='c6d4d722';
 function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('show'),2600); }
 const uid = p => p+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 
@@ -1946,6 +1946,20 @@ function renderAvisosEntidades(){
 
 /* ----- Sincronizar bancos (Open Banking): movimientos-auto.json, generado en el PC por actualizar_movimientos.py ----- */
 let bkHandle=null;
+let bkEstado=null;     // de la última lectura de movimientos-auto.json: cuándo se generó, permisos de los bancos y errores
+/* Avisos del Resumen sobre la descarga automática: permisos que caducan (14 días), errores y tarea que no se ejecuta */
+function alertasBancos(){
+  if(!bkEstado || DEMO) return [];
+  const t=hoy(), out=[];
+  for(const p of bkEstado.permisos){
+    const dias=Math.round((toDate(p.caduca.slice(0,10))-toDate(t))/864e5); if(dias>14) continue;
+    out.push({grave:dias<=3, txt:`🔑 <span><b>${esc(p.banco)}</b>: el permiso para leer tus movimientos ${dias<0?'ha caducado':dias===0?'caduca hoy':`caduca en ${dias} día${dias>1?'s':''} (${fmtFecha(p.caduca.slice(0,10))})`}. Renuévalo en el PC: <code>py -3 automatico\\actualizar_movimientos.py --autorizar --banco "${esc(p.banco)}"</code></span>`});
+  }
+  const gen=bkEstado.generado.slice(0,10);
+  if(gen && toDate(t)-toDate(gen)>=2*864e5) out.push({grave:true, txt:`⏸️ <span>La descarga automática de los bancos no se ejecuta desde el <b>${fmtFecha(gen)}</b>. Comprueba que el PC se ha encendido y que la tarea «MiPatrimonio - Actualizar movimientos» sigue en el Programador de tareas.</span>`});
+  else if(bkEstado.errores.length) out.push({grave:false, txt:`⚠️ <span>La última descarga de los bancos tuvo errores: ${bkEstado.errores.map(esc).join(' · ')}</span>`});
+  return out;
+}
 async function bkLeer(interactivo=true){
   if(od){ const r=await odLeerHermano('movimientos-auto.json'); return r?JSON.parse(r.texto):null; }
   if(!HAS_FS){
@@ -1988,6 +2002,7 @@ async function bkSync(interactivo=true){
   catch(e){ if(e.name==='AbortError') return; if(e.name==='NotFoundError') bkHandle=null; if(!interactivo) return; alert('No se pudo leer movimientos-auto.json: '+(e instanceof TypeError?'sin conexión':e.message)); return; }
   if(!datos){ if(interactivo) alert('No encuentro movimientos-auto.json. Ejecuta antes «Actualizar movimientos.bat» en el PC (está en la carpeta de la app).'); return; }
   if(Array.isArray(datos.entidades)){ entidadesAviso=datos.entidades; renderAvisosEntidades(); }
+  bkEstado={generado:datos.generado||'', permisos:datos.permisos||[], errores:datos.errores||[]}; renderBanner();
   const avisosBk=[...(datos.avisos||[]),...(datos.errores||[]).map(e=>'Error en la última descarga: '+e)];
   if(avisosBk.length){ if(interactivo) setTimeout(()=>alert('Bancos:\n\n'+avisosBk.join('\n\n')),400); else toast('Bancos: '+avisosBk[0]); }
   let ac=aplicarAjustesYCorreo(datos);      // antes de buscar duplicados: un ajuste ya resuelto no debe tapar a su movimiento real
@@ -3126,7 +3141,8 @@ function renderBanner(){
     : `🗓️ <span>Toca el cierre de <b>${fmtMesL(mesAct)}</b>${last?` (el último fue el ${fmtFecha(last.fecha)})`:''}.</span>`;
   const au=S.filter(r=>r.auto && !r.auto.revisado).at(-1);
   const hintAuto=au?`<div class="hint" style="font-size:13.5px;margin-bottom:14px"><div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">🤖 <span>Cierre de <b>${fmtMesL(au.mes)}</b> hecho automáticamente el ${fmtFecha(au.fecha)}.${au.auto.arrastradas.length?` Estos valores no tienen fuente automática y son los del cierre anterior: <b>${au.auto.arrastradas.map(nombreCuenta).map(esc).join(', ')}</b>.`:' Todos los valores vienen de fuentes automáticas.'}</span><button class="btn sm" id="autoRev">Revisar</button><button class="btn sm primary" id="autoOk">Está bien</button></div></div>`:'';
-  el.innerHTML = alertas + hintAuto + (toca && !au ? `<div class="hint" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:13.5px;margin-bottom:14px">${txt}<button class="btn sm primary" id="bannerBtn">Hacer cierre</button></div>` : '');
+  const bancos=alertasBancos().map(a=>`<div class="hint alerta" style="${a.grave?'':'border-left-color:var(--s4)'}">${a.txt}</div>`).join('');
+  el.innerHTML = bancos + alertas + hintAuto + (toca && !au ? `<div class="hint" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:13.5px;margin-bottom:14px">${txt}<button class="btn sm primary" id="bannerBtn">Hacer cierre</button></div>` : '');
   if(toca && !au) $('#bannerBtn').onclick=()=>openForm();
   if(au){ $('#autoRev').onclick=()=>openForm(au.id); $('#autoOk').onclick=async()=>{ au.auto.revisado=true; await save(); renderBanner(); }; }
 }
