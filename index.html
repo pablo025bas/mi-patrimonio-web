@@ -393,6 +393,7 @@ nav .ti{display:none}nav .s{display:none}
         </div>
       </div>
 
+      <div id="gPend"></div>
       <div class="grid kpis" id="gKpis"></div>
       <div class="grid two" style="margin-bottom:14px">
         <div class="card" id="gFlujoCard">
@@ -634,7 +635,7 @@ const fmtFecha = f => { const [y,m,d]=f.split('-'); return `${+d} ${MESES[+m-1]}
 const toDate = f => new Date(f+'T12:00:00');
 const hoy = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
 // La pone automatico/publicar_web.py al publicar; en local es 'dev'
-const VERSION='bf43f5b3';
+const VERSION='a702ac80';
 function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('show'),2600); }
 const uid = p => p+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 
@@ -1639,7 +1640,7 @@ const CATS_DEF = [
   ['transporte','Transporte'],['coche','Coche y gasolina'],['viajes','Viajes'],['ocio','Ocio y cultura'],
   ['compras','Compras'],['ropa','Ropa'],['suscripciones','Suscripciones'],['vivienda','Vivienda'],
   ['suministros','Suministros y teléfono'],['salud','Salud'],['deporte','Deporte'],['regalos','Regalos'],
-  ['bizum','Bizum enviados'],['otros','Otros'],['ingresos','Ingresos','ingreso'],['interno','Entre mis cuentas','interno'],
+  ['bizum','Bizum enviados'],['otros','Otros'],['ingresos','Ingresos','ingreso'],['interno','Entre mis cuentas','interno'],['pendiente','Pendiente de clasificar','interno'],
 ].map(([id,nombre,tipo='gasto'])=>({id,nombre,tipo}));
 const REGLAS_DEF = {
   delivery:'uber eats|glovo|just eat|deliveroo|telepizza|dominos|domino s',
@@ -1673,6 +1674,7 @@ function ensureGastos(d){
   if(!Array.isArray(d.categorias)) d.categorias=CATS_DEF.map(c=>({...c}));
   if(!Array.isArray(d.reglas)) d.reglas=Object.entries(REGLAS_DEF).flatMap(([cat,l])=>l.split('|').map(texto=>({texto,cat})));
   if(!Array.isArray(d.gastosIgnorados)) d.gastosIgnorados=[];
+  if(!d.categorias.some(c=>c.id==='pendiente')){ const i=d.categorias.findIndex(c=>c.id==='interno'); d.categorias.splice(i<0?d.categorias.length:i+1,0,{id:'pendiente',nombre:'Pendiente de clasificar',tipo:'interno'}); }
   if(!d.categorias.some(c=>c.id==='bizum')){ const i=d.categorias.findIndex(c=>c.id==='otros'); d.categorias.splice(i<0?d.categorias.length:i,0,{id:'bizum',nombre:'Bizum enviados',tipo:'gasto'}); }
   if((d.reglasVer||1)<2){ const ya=new Set(d.reglas.map(r=>norm(r.texto))); Object.entries(REGLAS_V2).forEach(([cat,l])=>l.split('|').forEach(texto=>{ if(!ya.has(norm(texto))) d.reglas.push({texto,cat}); })); d.reglasVer=2; }
   if(d.reglasVer<3){ const ya=new Set(d.reglas.map(r=>norm(r.texto))); ['alquiler','comunidad de propietarios','hipoteca','seguro hogar'].forEach(texto=>{ if(!ya.has(norm(texto))) d.reglas.push({texto,cat:'vivienda'}); }); ['cajero','ret efectivo','reintegro'].forEach(texto=>{ if(!ya.has(norm(texto))) d.reglas.push({texto,cat:'otros'}); }); d.reglasVer=3; }
@@ -1680,6 +1682,7 @@ function ensureGastos(d){
   if(d.reglasVer<4){ const OK=['nomina','salario','interest payment','cash reward','bonificacion','dividendo','dividend']; d.reglas=d.reglas.filter(r=>!(r.cat==='ingresos' && !r.u && !OK.includes(r.texto))); d.reglasVer=4; }
   // La limpieza anterior quitó la regla pero no corrigió los pagos ya categorizados con ella: se recategorizan las salidas automáticas marcadas como ingreso.
   if(d.reglasVer<5){ const ing=new Set(d.categorias.filter(c=>c.tipo==='ingreso').map(c=>c.id)); (d.gastos||[]).forEach(g=>{ if(g.auto!==false && g.importe<0 && ing.has(g.cat)){ g.cat=null; g.catFuente='signo'; } }); d.reglasVer=5; }
+  if(d.reglasVer<6){ if(!d.reglas.some(r=>norm(r.texto).trim()==='wallapop')) d.reglas.push({texto:'wallapop',cat:'compras'}); d.reglasVer=6; }
   if(!d.perfilesImport) d.perfilesImport={};
 }
 const norm = s => ' '+String(s??'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,' ').trim()+' ';
@@ -1687,9 +1690,14 @@ const catById = id => D.categorias.find(c=>c.id===id);
 const catNombre = id => catById(id)?.nombre || 'Sin categoría';
 const catTipo = id => catById(id)?.tipo || 'gasto';
 function catDeRegla(texto,soloUsuario,importe=null){ const t=norm(texto); for(const r of D.reglas){ if(soloUsuario && !r.u) continue; if(r.importe!=null && (importe==null || Math.abs(Math.abs(importe)-r.importe)>0.005)) continue; /* regla solo para ese importe (p. ej. el alquiler) */ const p=norm(r.texto); if(p.trim() && t.includes(p) && catById(r.cat)) return r.cat; } return null; }
+// Movimiento grande que el banco entrega sin concepto (Trade Republic): no se sabe si es gasto, ingreso o traspaso a un broker.
+// Queda «pendiente de clasificar» y no cuenta en gastos ni ingresos hasta que lo emparejes con otra cuenta, el correo le ponga nombre o lo clasifiques tú.
+const UMBRAL_PENDIENTE=100;
+const sinDetalle=g=>g.fuente==='Open Banking' && g.concepto==='(sin concepto)' && !g.bancoConcepto && Math.abs(g.importe)>=UMBRAL_PENDIENTE;
 function autoCat(g){
   const txt=g.concepto+' '+(g.bancoConcepto||'');
   let c=catDeRegla(txt,true,g.importe), f='regla';                      // 1) reglas que has creado tú
+  if(!c && sinDetalle(g)){ c='pendiente'; f='pendiente'; }              // 1b) grande y sin concepto: pendiente de clasificar
   if(!c && esTraspasoInterno(g)){ c='interno'; f='traspaso'; } // 2) transferencias entre tus cuentas
   if(!c && /\bbizum\b/i.test(txt)){ c=g.importe<0||D.ajustes?.bizumNeto?'bizum':'ingresos'; f='bizum'; } // 3) Bizum: enviados = gasto, recibidos = ingreso (o devolución que resta del gasto, si así lo eliges)
   if(!c){ c=catDeRegla(txt,false,g.importe); f='regla'; }                      // 4) reglas por defecto
@@ -1713,7 +1721,7 @@ function esTraspasoInterno(g){
 // Empareja salida y entrada del mismo importe entre dos cuentas tuyas (±4 días) y las marca como traspaso
 function emparejarTraspasos(){
   const medioOK=g=>['Transferencia','Inversión',''].includes(medioDeConcepto(g.concepto));
-  const cand=D.gastos.filter(g=>g.auto!==false && g.origen!=='Apple Pay' && g.origen!=='Manual' && !g.par && (g.catFuente==='signo'||g.catFuente==='traspaso'||!g.cat) && medioOK(g));
+  const cand=D.gastos.filter(g=>g.auto!==false && g.origen!=='Apple Pay' && g.origen!=='Manual' && !g.par && (g.catFuente==='signo'||g.catFuente==='traspaso'||g.catFuente==='pendiente'||!g.cat) && medioOK(g));
   const pos=cand.filter(g=>g.importe>0); let n=0;
   for(const a of cand.filter(g=>g.importe<0)){
     if(a.par) continue; const ta=toDate(a.fecha).getTime(), ca=origenGasto(a).ck;
@@ -1778,6 +1786,9 @@ function buscarGemelo(importe,fecha,esBanco,usados,concepto='',cuentaPat=null,ta
   }
   return best;
 }
+// Un movimiento sin concepto del banco (o que solo tiene el nombre que le puso el correo) se reconoce por importe y fechas, no por texto
+const sinTexto=c=>norm(c).trim()==='sin concepto';
+const conceptoLibre=g=>sinTexto(g.concepto) || !!g.porCorreo;
 // ¿Este movimiento del extracto ya está importado (de otro extracto que se solapa, en PDF o en Excel)?
 function buscarDuplicado(r,origen,cuentaPat,usados){
   const t=toDate(r.fecha).getTime(); let best=null,bs=-Infinity;
@@ -1787,7 +1798,7 @@ function buscarDuplicado(r,origen,cuentaPat,usados){
     const dd=Math.abs(t-toDate(g.fecha).getTime())/864e5; if(dd>4) continue;
     const mismoSaldo = g.saldo!=null && r.saldo!=null && Math.abs(g.saldo-r.saldo)<0.005;
     if(g.saldo!=null && r.saldo!=null && !mismoSaldo) continue;          // saldos distintos: son movimientos distintos
-    const sim=simConcepto(g.concepto,r.concepto);
+    const sim=(conceptoLibre(g)||sinTexto(r.concepto))?1:simConcepto(g.concepto,r.concepto);
     if(!mismoSaldo && dd>0 && sim<0.3) continue;                          // otra fecha y otro concepto: no es el mismo
     if(!mismoSaldo && dd===0 && sim<0.3 && norm(g.concepto)!==norm(r.concepto)) continue;
     const sc=(mismoSaldo?5:0)+sim*3+(dd===0?2:dd<=1?1:0);
@@ -1912,6 +1923,23 @@ async function bkLeer(interactivo=true){
   if(p!=='granted') return null;
   return JSON.parse(await (await bkHandle.getFile()).text());
 }
+// Conciliación por saldo y correo (los genera actualizar_movimientos.py): retira el ajuste cuando ya ha llegado el movimiento real
+// y pone nombre (comercio del recibo del correo) a los movimientos que el banco entrega sin concepto o como ajuste
+const CONCEPTO_AJUSTE='Pago no detallado por el banco';
+function aplicarAjustesYCorreo(datos){
+  let n=0;
+  const fuera=new Set((datos.ajustes_resueltos||[]).map(i=>'eb|'+i));
+  if(fuera.size){ const antes=D.gastos.length; D.gastos=D.gastos.filter(g=>!(fuera.has(g.hash) && g.fuente==='Conciliación')); n+=antes-D.gastos.length; }
+  for(const m of (datos.movimientos||[])){
+    if(!m.concepto_correo) continue;
+    const g=D.gastos.find(x=>x.hash==='eb|'+m.id);
+    if(!g || g.concepto===m.concepto_correo || !['(sin concepto)',CONCEPTO_AJUSTE].includes(g.concepto)) continue;   // ya tiene nombre o lo cambiaste tú
+    g.concepto=m.concepto_correo; if(m.ajuste && m.fecha) g.fecha=m.fecha; if(!m.ajuste) g.porCorreo=true;
+    if(g.auto!==false){ delete g.par; autoCat(g); }
+    n++;
+  }
+  return n;
+}
 async function bkSync(interactivo=true){
   if(!D || DEMO) return;
   let datos;
@@ -1920,20 +1948,21 @@ async function bkSync(interactivo=true){
   if(!datos){ if(interactivo) alert('No encuentro movimientos-auto.json. Ejecuta antes «Actualizar movimientos.bat» en el PC (está en la carpeta de la app).'); return; }
   const avisosBk=[...(datos.avisos||[]),...(datos.errores||[]).map(e=>'Error en la última descarga: '+e)];
   if(avisosBk.length){ if(interactivo) setTimeout(()=>alert('Bancos:\n\n'+avisosBk.join('\n\n')),400); else toast('Bancos: '+avisosBk[0]); }
+  let ac=aplicarAjustesYCorreo(datos);      // antes de buscar duplicados: un ajuste ya resuelto no debe tapar a su movimiento real
   const vistos=new Set([...D.gastos.map(g=>g.hash),...D.gastosIgnorados]);
   const usados=new Set(), usadosDup=new Set(), res=[];
   for(const m of (datos.movimientos||[]).slice().sort((a,b)=>a.fecha<b.fecha?-1:a.fecha>b.fecha?1:0)){
     const f=parseFecha(m.fecha), importe=Math.round(Number(m.importe)*100)/100;
     if(!f || !importe || isNaN(importe)) continue;
     const hash='eb|'+m.id; if(vistos.has(hash)) continue;                // ya importado antes
-    const concepto=String(m.concepto||'').trim()||'(sin concepto)', cuentaPat=adivinarCuentaPat(m.banco)||null;
+    const sinConcepto=!String(m.concepto||'').trim();
+    const concepto=(m.concepto_correo && (sinConcepto || m.ajuste)) ? m.concepto_correo : (String(m.concepto||'').trim()||'(sin concepto)'), cuentaPat=adivinarCuentaPat(m.banco)||null;
     let estado='nuevo', gem=null, dup=null;
-    if((dup=buscarDuplicado({fecha:f.fecha,importe,concepto,saldo:null},m.banco,cuentaPat,usadosDup))){ estado='repetido'; usadosDup.add(dup.id); } // ya vino de un extracto en PDF/CSV
+    if(!m.ajuste && (dup=buscarDuplicado({fecha:f.fecha,importe,concepto,saldo:null},m.banco,cuentaPat,usadosDup))){ estado='repetido'; usadosDup.add(dup.id); } // ya vino de un extracto en PDF/CSV
     else if(importe<0 && (gem=buscarGemelo(importe,f.fecha,true,usados,concepto,cuentaPat))){ estado='applepay'; usados.add(gem.id); }   // ya estaba como pago de Apple Pay
-    // Sin concepto (p. ej. Trade Republic solo da fecha e importe): solo sirve para enlazar con Apple Pay; no se importa ni se marca como visto, por si el pago de Apple Pay llega más tarde
-    if(estado==='nuevo' && !String(m.concepto||'').trim()) continue;
+    // Sin concepto (p. ej. Trade Republic solo da fecha e importe): se importa como «(sin concepto)»; si el pago de Apple Pay llega después, buscarGemelo lo enlaza con este movimiento
     vistos.add(hash);
-    res.push({fecha:f.fecha,importe,concepto,hash,estado,gem,banco:m.banco,cuentaPat,cuentaBanco:m.cuenta||'',monedaOrig:m.moneda_original||null,importeOrig:m.importe_original??null});
+    res.push({fecha:f.fecha,importe,concepto,hash,estado,gem,ajuste:!!m.ajuste,porCorreo:!!(m.concepto_correo && sinConcepto && !m.ajuste),banco:m.banco,cuentaPat,cuentaBanco:m.cuenta||'',monedaOrig:m.moneda_original||null,importeOrig:m.importe_original??null});
   }
   const nuevos=res.filter(r=>r.estado==='nuevo'), rep=res.filter(r=>r.estado==='repetido').length, ap=res.filter(r=>r.estado==='applepay').length;
   // Saldo de cada banco: solo si tiene un único saldo en el archivo (una cuenta) y es más reciente que el que ya tenías
@@ -1954,7 +1983,7 @@ async function bkSync(interactivo=true){
   const txtDesc=()=>desc?` · ${desc} pago(s) de Apple Pay que el banco no cobró (rechazados) descartado(s)`:'';
   if(!res.length && !saldos.length){
     desc+=descartarReintentos();
-    if(desc){ await save(); renderGastos(); toast('Bancos: no hay movimientos nuevos'+txtDesc()); }
+    if(desc||ac){ await save(); renderGastos(); toast('Bancos: no hay movimientos nuevos'+txtDesc()+(ac?` · ${ac} ajuste(s) o nombre(s) actualizado(s)`:'')); }
     else if(interactivo) toast('Bancos: no hay movimientos nuevos'+(datos.generado?` (archivo del ${datos.generado.slice(0,10)})`:''));
     return;
   }
@@ -1966,11 +1995,11 @@ async function bkSync(interactivo=true){
   const lote={id:uid('L'),cuando:new Date().toISOString().slice(0,16).replace('T',' '),archivo:'movimientos-auto.json',banco:[...new Set(res.map(r=>r.banco))].join(', ')||'Bancos',cuenta:null,n:0,conc:[],hashes:[],saldo:null,saldos};
   let n=0;
   for(const r of res){
-    if(r.estado==='nuevo'){ const g={id:uid('g'),fecha:r.fecha,hora:'',importe:r.importe,concepto:r.concepto,tarjeta:'',origen:r.banco,cuenta:r.cuentaPat,cuentaBanco:r.cuentaBanco||'',lote:lote.id,hash:r.hash,saldo:null,fuente:'Open Banking'}; if(r.monedaOrig && r.monedaOrig!=='EUR'){ g.monedaOrig=r.monedaOrig; g.importeOrig=r.importeOrig; } autoCat(g); D.gastos.push(g); n++; }
+    if(r.estado==='nuevo'){ const g={id:uid('g'),fecha:r.fecha,hora:'',importe:r.importe,concepto:r.concepto,tarjeta:'',origen:r.banco,cuenta:r.cuentaPat,cuentaBanco:r.cuentaBanco||'',lote:lote.id,hash:r.hash,saldo:null,fuente:r.ajuste?'Conciliación':'Open Banking'}; if(r.porCorreo) g.porCorreo=true; if(r.monedaOrig && r.monedaOrig!=='EUR'){ g.monedaOrig=r.monedaOrig; g.importeOrig=r.importeOrig; } autoCat(g); D.gastos.push(g); n++; }
     else if(r.estado==='applepay'){ r.gem.conc=true; r.gem.bancoConcepto=r.concepto; r.gem.bancoOrigen=r.banco; if(!r.gem.cuenta && r.cuentaPat) r.gem.cuenta=r.cuentaPat; if(!r.gem.cuentaBanco) r.gem.cuentaBanco=r.cuentaBanco; D.gastosIgnorados.push(r.hash); lote.conc.push(r.gem.id); lote.hashes.push(r.hash); }
     else { D.gastosIgnorados.push(r.hash); lote.hashes.push(r.hash); }
   }
-  lote.n=n;
+  lote.n=n; ac+=aplicarAjustesYCorreo(datos);
   desc+=descartarReintentos();   // ahora que el banco ha confirmado pagos, se ve qué intentos con otra tarjeta fueron rechazados
   const tr=emparejarTraspasos(); if(tr) toast(`${tr} movimiento(s) detectados como traspaso entre tus cuentas`);
   for(const s of saldos) D.saldosBanco[s.id]=s.nuevo;
@@ -2068,9 +2097,21 @@ function analizarImport(){
     else if((dup=buscarDuplicado({fecha:f.fecha,importe,concepto,saldo},cuenta,imp.cuentaPat,usadosDup))){ estado='repetido'; usadosDup.add(dup.id); }
     else if(importe<0 && (gem=buscarGemelo(importe,f.fecha,true,usados,concepto,imp.cuentaPat))){ estado='applepay'; usados.add(gem.id); }
     vistos.add(hash);
-    res.push({fecha:f.fecha,importe,concepto,hash,estado,gem,saldo});
+    res.push({fecha:f.fecha,importe,concepto,hash,estado,gem,dup,saldo});
   }
   return res;
+}
+// Extracto con concepto (p. ej. el PDF de Trade Republic) sobre movimientos de Open Banking que llegaron sin él: se les pone el concepto y se reclasifican
+function enriquecerDuplicados(res){
+  let n=0;
+  for(const r of res){
+    const g=r.dup; if(r.estado!=='repetido' || !g || !conceptoLibre(g) || sinTexto(r.concepto)) continue;
+    g.concepto=r.concepto; g.bancoConcepto=r.concepto; delete g.porCorreo;
+    if(g.saldo==null && r.saldo!=null) g.saldo=r.saldo;
+    if(g.auto!==false){ delete g.par; autoCat(g); }
+    n++;
+  }
+  return n;
 }
 function renderImport(){
   const P=$('#gImportPanel'); if(!imp){ P.classList.add('hidden'); P.innerHTML=''; return; }
@@ -2078,6 +2119,7 @@ function renderImport(){
   const opts=sel=>hdr.map((h,i)=>`<option value="${i}" ${i===sel?'selected':''}>${esc(String(h instanceof Date?'Columna '+(i+1):(h||'Columna '+(i+1))))}</option>`).join('');
   const res=analizarImport();
   const nuevos=res.filter(r=>r.estado==='nuevo'), rep=res.filter(r=>r.estado==='repetido').length, ap=res.filter(r=>r.estado==='applepay').length;
+  const enr=res.filter(r=>r.estado==='repetido' && r.dup && conceptoLibre(r.dup) && !sinTexto(r.concepto)).length;
   const gastoN=nuevos.filter(r=>r.importe<0).reduce((a,r)=>a-r.importe,0), ingN=nuevos.filter(r=>r.importe>0).reduce((a,r)=>a+r.importe,0);
   const fechas=res.map(r=>r.fecha).sort();
   const muestra=res.slice(0,12);
@@ -2093,9 +2135,9 @@ function renderImport(){
     </div>
     ${(()=>{ const us=ultimoSaldo(res); return us&&imp.cuentaPat?`<p class="muted" style="margin:0;font-size:12.5px">Saldo final del extracto: <b>${eur2.format(us.saldo)}</b> (${fmtFecha(us.fecha)}). Se propondrá en el próximo cierre de ${esc(cuentaById(imp.cuentaPat)?.entidad||'')}.</p>`:''; })()}
     <p>${res.length?`<b>${nuevos.length}</b> movimientos nuevos (${fmtFecha(fechas[0])} – ${fmtFecha(fechas.at(-1))}): <span class="down">${eur2.format(gastoN)} en gastos</span> y <span class="up">${eur2.format(ingN)} en ingresos</span>.`:'<span class="down">No encuentro movimientos con estas columnas. Revisa la fila de cabecera y las columnas.</span>'}
-      ${rep?`<br><span class="muted">${rep} ya estaban importados y se omiten.</span>`:''}${ap?`<br><span class="muted">${ap} coinciden con pagos de Apple Pay ya registrados y no se duplicarán.</span>`:''}</p>
+      ${rep?`<br><span class="muted">${rep} ya estaban importados y se omiten${enr?` (a ${enr} de ellos, que llegaron del banco sin concepto, se les pondrá el del extracto)`:''}.</span>`:''}${ap?`<br><span class="muted">${ap} coinciden con pagos de Apple Pay ya registrados y no se duplicarán.</span>`:''}</p>
     ${muestra.length?`<div class="tablewrap"><table><thead><tr><th>Fecha</th><th>Concepto</th><th class="r">Importe</th><th>Categoría</th><th>Estado</th></tr></thead><tbody>${muestra.map(r=>`<tr class="${r.estado==='nuevo'?'':'muted'}"><td>${fmtFecha(r.fecha)}</td><td style="max-width:320px;overflow:hidden;text-overflow:ellipsis">${esc(r.concepto)}</td><td class="r num ${r.importe>0?'up':''}">${eur2.format(r.importe)}</td><td>${esc(catNombre((g=>{ autoCat(g); return g.cat; })({concepto:r.concepto,importe:r.importe,origen:imp.cuenta,cuenta:imp.cuentaPat})))}</td><td>${{nuevo:'Nuevo',repetido:'Ya importado (duplicado)',applepay:'= Apple Pay'}[r.estado]}</td></tr>`).join('')}</tbody></table></div>${res.length>12?`<p class="muted" style="font-size:12px">…y ${res.length-12} más</p>`:''}`:''}
-    <div style="display:flex;gap:8px;margin-top:10px"><button class="btn primary" id="iOk" ${nuevos.length||ap?'':'disabled'}>Importar ${nuevos.length} movimientos</button></div>`;
+    <div style="display:flex;gap:8px;margin-top:10px"><button class="btn primary" id="iOk" ${nuevos.length||ap||enr?'':'disabled'}>Importar ${nuevos.length} movimientos${enr?` y poner concepto a ${enr}`:''}</button></div>`;
   P.classList.remove('hidden');
   const upd=()=>{ imp.cuenta=$('#iCuenta').value.trim(); const h=Math.min(imp.rows.length-1,Math.max(0,+$('#iH').value-1)); imp.map={h,fecha:+$('#iF').value,concepto:+$('#iC').value,importe:+$('#iI').value,saldo:+$('#iS').value}; imp.cuentaPat=$('#iP').value; renderImport(); };
   ['#iCuenta','#iH','#iF','#iC','#iI','#iS','#iP'].forEach(s=>$(s).onchange=upd);
@@ -2108,14 +2150,14 @@ function renderImport(){
       if(r.estado==='nuevo'){ const g={id:uid('g'),fecha:r.fecha,hora:'',importe:r.importe,concepto:r.concepto,tarjeta:'',origen:imp.cuenta,cuenta:imp.cuentaPat||null,lote:lote.id,hash:r.hash,saldo:r.saldo}; autoCat(g); D.gastos.push(g); informe?.gastos.push(g); n++; }
       else if(r.estado==='applepay'){ r.gem.conc=true; r.gem.bancoConcepto=r.concepto; r.gem.bancoOrigen=imp.cuenta; if(!r.gem.cuenta && imp.cuentaPat) r.gem.cuenta=imp.cuentaPat; D.gastosIgnorados.push(r.hash); lote.conc.push(r.gem.id); lote.hashes.push(r.hash); if(informe) informe.ap++; }
     }
-    lote.n=n;
+    lote.n=n; const conC=enriquecerDuplicados(res);
     const tr=emparejarTraspasos(); if(tr) toast(`${tr} movimiento(s) detectados como traspaso entre tus cuentas`);
     D.perfilesImport[imp.sig]={cuenta:imp.cuenta,map:imp.map,cuentaPat:imp.cuentaPat};
     const us=ultimoSaldo(res); if(us && imp.cuentaPat){ const ps=D.saldosBanco[imp.cuentaPat]; if(!ps || us.fecha>=ps.fecha){ const nuevo={fecha:us.fecha,saldo:us.saldo,origen:imp.cuenta}; lote.saldo={id:imp.cuentaPat,prev:ps||null,nuevo}; D.saldosBanco[imp.cuentaPat]=nuevo; } }
     if(n || lote.conc.length){ D.importaciones=[lote,...(D.importaciones||[])].slice(0,40); informe?.lotes.push(lote.id); }
     if(res.length) gMes=kDe(res.map(r=>r.fecha).sort().at(-1));
     if(informe){ informe.archivos.push({file:imp.file,cuenta:imp.cuenta}); const fs=res.map(r=>r.fecha).sort(); if(fs.length) informe.rangos.push({desde:fs[0],hasta:fs.at(-1),cuentaPat:imp.cuentaPat||null}); }
-    imp=null; await save(); renderImport(); renderGastos(); toast(`${n} movimientos importados`); siguienteExtracto();
+    imp=null; await save(); renderImport(); renderGastos(); toast(`${n} movimientos importados`+(conC?` · ${conC} con concepto nuevo`:'')); siguienteExtracto();
   };
 }
 
@@ -2423,6 +2465,10 @@ function renderGastos(){
     `<div class="card kpi"><div class="l">Ahorro ${anual?'del año':'del mes'}</div><div class="v num ${R.ingreso?cls(ahorro):''}">${R.ingreso?sgn(ahorro):'–'}</div><div class="d num">${R.ingreso?`Tasa de ahorro ${pct(ahorro/R.ingreso,0)}`:'Necesita ingresos'}</div></div>`,
     `<div class="card kpi ${R.sinCat?'click':''}" id="gKpiSin"><div class="l">Sin categoría</div><div class="v num ${R.sinCat?'down':''}">${R.sinCat}</div><div class="d">${R.sinCat?'Pulsa para revisarlos':'Todo categorizado ✓'}</div></div>`,
   ].join('');
+  { const pend=D.gastos.filter(g=>g.cat==='pendiente');
+    const ent=pend.filter(g=>g.importe>0).reduce((a,g)=>a+g.importe,0), sal=pend.filter(g=>g.importe<0).reduce((a,g)=>a-g.importe,0);
+    $('#gPend').innerHTML=pend.length?`<div class="hint" style="margin-bottom:12px;display:flex;gap:12px;align-items:center;flex-wrap:wrap"><span style="flex:1;min-width:240px"><b>${pend.length} movimiento(s) del banco sin concepto por clasificar</b> (${eur2.format(sal)} de salidas y ${eur2.format(ent)} de entradas). No cuentan en tus gastos ni ingresos hasta que elijas qué son: gasto, ingreso o traspaso a un broker.</span><button class="btn sm" id="gPendVer">Clasificarlos</button></div>`:'';
+    if(pend.length) $('#gPendVer').onclick=()=>{ gFiltro='pendiente'; gDetEn=''; gDesde=pend.map(g=>g.fecha).sort()[0]; gHasta=''; $('#gDesde').value=gDesde; $('#gHasta').value=''; renderGastos(); $('#gTable').scrollIntoView({behavior:'smooth'}); }; }
   if(R.sinCat) $('#gKpiSin').onclick=()=>{ gFiltro='__sin'; renderGastos(); $('#gTable').scrollIntoView({behavior:'smooth'}); };
   // barras por categoría, con presupuesto si lo hay (un solo tono salvo aviso de presupuesto)
   const pres=D.ajustes.presupuestos, mult=anual?12:1;
@@ -2703,7 +2749,7 @@ $('#gTable').addEventListener('change',async e=>{
   g.cat=cat; g.auto=false; g.catFuente='manual';
   if(cat){ // aprender: crear regla y aplicarla a los movimientos parecidos no categorizados a mano
     const k=claveRegla(g.concepto);
-    if(k){
+    if(k && !['(sin concepto)',CONCEPTO_AJUSTE].includes(g.concepto)){   // sin concepto no hay nada que aprender: la regla arrastraría a todos los demás
       const r=D.reglas.find(r=>norm(r.texto)===norm(k));
       if(r){ r.cat=cat; r.u=true; } else D.reglas.unshift({texto:k,cat,u:true});
       let n=0; D.gastos.forEach(o=>{ if(o!==g && o.auto!==false && o.cat!==cat && norm(o.concepto).includes(norm(k))){ o.cat=cat; o.auto=true; n++; } });
