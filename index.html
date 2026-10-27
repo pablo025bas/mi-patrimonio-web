@@ -635,7 +635,7 @@ const fmtFecha = f => { const [y,m,d]=f.split('-'); return `${+d} ${MESES[+m-1]}
 const toDate = f => new Date(f+'T12:00:00');
 const hoy = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
 // La pone automatico/publicar_web.py al publicar; en local es 'dev'
-const VERSION='18ab0e59';
+const VERSION='32d1dade';
 function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('show'),2600); }
 const uid = p => p+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 
@@ -1796,10 +1796,12 @@ function buscarGemelo(importe,fecha,esBanco,usados,concepto='',cuentaPat=null,ta
 const sinTexto=c=>norm(c).trim()==='sin concepto';
 const conceptoLibre=g=>sinTexto(g.concepto) || !!g.porCorreo;
 // ¿Este movimiento del extracto ya está importado (de otro extracto que se solapa, en PDF o en Excel)?
-function buscarDuplicado(r,origen,cuentaPat,usados){
+// sinHermanos: el movimiento de Open Banking es el 2.º, 3.º… idéntico del mismo día («#2» en su id): los que ya vinieron de Open Banking no son su duplicado
+function buscarDuplicado(r,origen,cuentaPat,usados,sinHermanos=false){
   const t=toDate(r.fecha).getTime(); let best=null,bs=-Infinity;
   for(const g of D.gastos){
     if(usados.has(g.id) || g.origen==='Apple Pay' || g.origen==='Manual' || Math.abs(g.importe-r.importe)>0.005) continue;
+    if(sinHermanos && g.fuente==='Open Banking') continue;
     const misma=(cuentaPat && g.cuenta===cuentaPat) || norm(g.origen)===norm(origen); if(!misma) continue;
     const dd=Math.abs(t-toDate(g.fecha).getTime())/864e5; if(dd>4) continue;
     const mismoSaldo = g.saldo!=null && r.saldo!=null && Math.abs(g.saldo-r.saldo)<0.005;
@@ -1964,7 +1966,7 @@ async function bkSync(interactivo=true){
     const sinConcepto=!String(m.concepto||'').trim();
     const concepto=(m.concepto_correo && (sinConcepto || m.ajuste)) ? m.concepto_correo : (String(m.concepto||'').trim()||'(sin concepto)'), cuentaPat=adivinarCuentaPat(m.banco)||null;
     let estado='nuevo', gem=null, dup=null;
-    if(!m.ajuste && (dup=buscarDuplicado({fecha:f.fecha,importe,concepto,saldo:null},m.banco,cuentaPat,usadosDup))){ estado='repetido'; usadosDup.add(dup.id); } // ya vino de un extracto en PDF/CSV
+    if(!m.ajuste && (dup=buscarDuplicado({fecha:f.fecha,importe,concepto,saldo:null},m.banco,cuentaPat,usadosDup,/#\d+$/.test(m.id)))){ estado='repetido'; usadosDup.add(dup.id); } // ya vino de un extracto en PDF/CSV
     else if(importe<0 && (gem=buscarGemelo(importe,f.fecha,true,usados,concepto,cuentaPat))){ estado='applepay'; usados.add(gem.id); }   // ya estaba como pago de Apple Pay
     // Sin concepto (p. ej. Trade Republic solo da fecha e importe): se importa como «(sin concepto)»; si el pago de Apple Pay llega después, buscarGemelo lo enlaza con este movimiento
     vistos.add(hash);
