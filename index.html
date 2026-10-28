@@ -601,6 +601,8 @@ nav .ti{display:none}nav .s{display:none}
         <p class="muted" id="autoInfo" style="font-size:12.5px;margin:10px 0 0"></p>
         <p class="muted" id="verInfo" style="font-size:12px;margin:10px 0 0"></p>
         <label class="field" style="flex-direction:row;align-items:center;gap:6px;margin-top:10px">Inflación esperada %<input id="inflPct" inputmode="decimal" style="width:60px"></label>
+        <label class="field" style="flex-direction:row;align-items:center;gap:6px;margin-top:6px"><input type="checkbox" id="inflAuto"> Ajustarla sola con el último IPC de España</label>
+        <p class="muted" id="inflInfo" style="font-size:12px;margin:4px 0 0"></p>
       </div>
       <div class="card" style="margin-top:14px" id="segCard">
         <h2>Seguridad, copias e informes</h2>
@@ -665,7 +667,7 @@ const fmtFecha = f => { const [y,m,d]=f.split('-'); return `${+d} ${MESES[+m-1]}
 const toDate = f => new Date(f+'T12:00:00');
 const hoy = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
 // La pone automatico/publicar_web.py al publicar; en local es 'dev'
-const VERSION='815a9370';
+const VERSION='8b920144';
 function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('show'),2600); }
 const uid = p => p+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 
@@ -1636,7 +1638,7 @@ function renderCuentas(){
   $('#nTipo').innerHTML=TIPOS.map(t=>`<option value="${t.id}">${t.nombre}</option>`).join('');
   $('#fileInfo').innerHTML = od ? `Conectado a OneDrive: <b>${esc(od.ruta)}</b>. Los cambios se guardan automáticamente y se sincronizan con tus demás dispositivos. Última actualización: ${esc(D.actualizado||'–')}.` : fileHandle ? `Conectado a <b>${esc(fileHandle.name)}</b>. Los cambios se guardan automáticamente y OneDrive los sincroniza. Última actualización: ${esc(D.actualizado||'–')}.` : `Sin archivo conectado: los cambios quedan en este navegador. Pulsa el indicador de arriba a la derecha para descargar <b>datos.json</b> y reemplázalo en la carpeta de OneDrive.`;
   $('#chFile').classList.toggle('hidden',!HAS_FS && !od); $('#odOut').classList.toggle('hidden',!od);
-  $('#recDia').value=D.ajustes.recordatorioDia; $('#autoCierreOn').checked=D.ajustes.autoCierre!==false; $('#inflPct').value=nf2.format(D.ajustes.inflacion);
+  $('#recDia').value=D.ajustes.recordatorioDia; $('#autoCierreOn').checked=D.ajustes.autoCierre!==false; pintarInflacion();
   idb.get('autoHandle').then(h=>{ $('#autoInfo').innerHTML = h ? `Saldos automáticos conectados: <b>${esc(h.name)}</b>${autoData?` (actualizados el ${fmtFecha(autoData.fecha)})`:''}.` : 'Saldos automáticos (Indexa, Binance): sin conectar. Ejecuta <b>Actualizar saldos.bat</b> y conecta el archivo <b>saldos-auto.json</b> que genera.'; });
 }
 $('#accTable').addEventListener('change',async e=>{
@@ -2035,6 +2037,7 @@ async function bkSync(interactivo=true){
   try{ datos=await bkLeer(interactivo); }
   catch(e){ if(e.name==='AbortError') return; if(e.name==='NotFoundError') bkHandle=null; if(!interactivo) return; alert('No se pudo leer movimientos-auto.json: '+(e instanceof TypeError?'sin conexión':e.message)); return; }
   if(!datos){ if(interactivo) alert('No encuentro movimientos-auto.json. Ejecuta antes «Actualizar movimientos.bat» en el PC (está en la carpeta de la app).'); return; }
+  const nc=datos.noticias?aplicarNoticias(datos.noticias):0; if(nc){ pintarInflacion(); if(current==='inversiones') renderInversiones(); }
   let ci=0; if(Array.isArray(datos.entidades)){ entidadesAviso=datos.entidades; ci=guardarCorreoInv(datos.entidades); renderAvisosEntidades(); if(ci&&current==='inversiones') renderInversiones(); }
   bkEstado={generado:datos.generado||'', permisos:datos.permisos||[], errores:datos.errores||[]}; renderBanner();
   const avisosBk=[...(datos.avisos||[]),...(datos.errores||[]).map(e=>'Error en la última descarga: '+e)];
@@ -2074,7 +2077,7 @@ async function bkSync(interactivo=true){
   const txtDesc=()=>desc?` · ${desc} pago(s) de Apple Pay que el banco no cobró (rechazados) descartado(s)`:'';
   if(!res.length && !saldos.length){
     desc+=descartarReintentos();
-    if(desc||ac||ci){ await save(); renderGastos(); toast('Bancos: no hay movimientos nuevos'+txtDesc()+(ac?` · ${ac} ajuste(s) o nombre(s) actualizado(s)`:'')); }
+    if(desc||ac||ci||nc){ await save(); renderGastos(); toast('Bancos: no hay movimientos nuevos'+txtDesc()+(ac?` · ${ac} ajuste(s) o nombre(s) actualizado(s)`:'')); }
     else if(interactivo) toast('Bancos: no hay movimientos nuevos'+(datos.generado?` (archivo del ${datos.generado.slice(0,10)})`:''));
     return;
   }
@@ -3858,7 +3861,8 @@ $('#segCopias').onclick=async e=>{
     catch(err){ if(err.message!=='Cancelado') alert('No se pudo restaurar: '+err.message); }
   }
 };
-$('#inflPct').onchange=async e=>{ D.ajustes.inflacion=Math.max(0,Math.min(20,numIn(e.target.value,2.5))); await save(); renderAll(); };
+$('#inflPct').onchange=async e=>{ D.ajustes.inflacion=Math.max(0,Math.min(20,numIn(e.target.value,2.5))); D.ajustes.inflacionAuto=false; pintarInflacion(); await save(); renderAll(); };   // al escribirla a mano deja de ajustarse sola
+$('#inflAuto').onchange=async e=>{ D.ajustes.inflacionAuto=e.target.checked; if(e.target.checked && D.noticias?.inflacion) aplicarInflacion(D.noticias.inflacion); pintarInflacion(); await save(); renderAll(); };
 
 /* ----- Informe anual ----- */
 function datosInforme(a){
@@ -4197,6 +4201,27 @@ function invMovsBanco(desde,hasta){
   }
   return {total,porDest,compras,sinDestino};
 }
+// Noticias del día para el análisis de Inversiones y último IPC: los deja la tarea diaria de Claude en noticias-auto.json
+function aplicarNoticias(n){
+  if(!n||typeof n!=='object'||typeof n.generado!=='string') return 0;
+  let cambio=0;
+  if(!D.noticias || n.generado>D.noticias.generado){
+    const c=invLimpiarComentario({contexto:n.contexto});
+    D.noticias={generado:n.generado.slice(0,19),resumen:typeof n.resumen==='string'?n.resumen:'',contexto:c.contexto||[],inflacion:n.inflacion||null}; cambio=1;
+  }
+  if(n.inflacion && aplicarInflacion(n.inflacion)) cambio=1;
+  return cambio;
+}
+function aplicarInflacion(x){
+  const v=+x?.valor; if(!isFinite(v)||v<-5||v>30||!/^\d{4}-\d\d$/.test(x.mes||'')) return 0;
+  const dato={valor:v,mes:x.mes,tipo:String(x.tipo||'IPC'),fuente:String(x.fuente?.nombre||'')};
+  const prev=D.ajustes.inflacionDato, nuevo=!prev||prev.mes!==dato.mes||prev.valor!==dato.valor;
+  if(nuevo) D.ajustes.inflacionDato=dato;
+  if(D.ajustes.inflacionAuto===false || D.ajustes.inflacion===v) return nuevo?1:0;
+  D.ajustes.inflacion=v; return 1;
+}
+const pintarInflacion=()=>{ $('#inflPct').value=nf2.format(D.ajustes.inflacion); $('#inflAuto').checked=D.ajustes.inflacionAuto!==false; $('#inflInfo').textContent=inflInfoTxt(); };
+const inflInfoTxt=()=>{ const d=D.ajustes.inflacionDato; if(!d) return D.ajustes.inflacionAuto===false?'':'Se ajustará cuando llegue el próximo dato del IPC.'; const t=`Último dato: ${nf2.format(d.valor)} % (${d.tipo}, ${fmtMesL(d.mes)}${d.fuente?', '+d.fuente:''}).`; return D.ajustes.inflacionAuto===false?t+' Ahora usas tu propia cifra.':t; };
 // Avisos del correo que sirven para Inversiones: se guardan en tus datos para tener el historial (movimientos-auto.json solo trae los últimos)
 const CORREO_INV=['operacion_fondos','transferencia_sepa','intereses','aportacion','traspaso_fondos'];
 function guardarCorreoInv(E){
@@ -4366,12 +4391,13 @@ function invChequeos({s,t,fichas,F,hist,remu}){
   if(c?.gasto) add('colchon', c.meses<3?'actuar':c.meses<c.obj?'vigilar':'bien',
     `Tu liquidez (${eur.format(c.liq)}) cubre ${meses(c.meses)} meses de gastos a ${eur.format(c.gasto)}/mes; tu objetivo son ${c.obj}. `+(c.dif>=0?`Hay ${eur.format(c.dif)} por encima del colchón.`:`Faltan ${eur.format(-c.dif)} para llegar.`));
   // dinero parado: lo que sobra del colchón más el monetario
+  const dI=D.ajustes.inflacionDato, infTxt=dI&&D.ajustes.inflacionAuto!==false&&dI.valor===D.ajustes.inflacion?` (${dI.tipo}, ${fmtMesL(dI.mes)})`:'';
   const mon=t.activos.monetario||0, parado=Math.max(0,c?.dif||0)+mon, base=R?.T||t.total, pp=base?parado/base:0;
   if(parado>=1000){
     const tae=remu.length?remu.reduce((a,r)=>a+r.v*r.tae,0)/remu.reduce((a,r)=>a+r.v,0):null;
     add('liquidez', pp>=.3?'actuar':pp>=.15?'vigilar':'bien',
       `${eur.format(parado)} (${p0(pp)} de tu patrimonio) están en liquidez por encima del colchón${mon?` o en el monetario (${eur.format(mon)})`:''}. `
-      +(tae!=null?`El efectivo de tus brokers rinde en torno al ${pct(tae,2)} TAE con una inflación del ${pct(infl,1)}: conserva su valor, pero no crece.`:`Por debajo de la inflación (${pct(infl,1)}) pierde poder de compra.`)
+      +(tae!=null?`El efectivo de tus brokers rinde en torno al ${pct(tae,2)} TAE con una inflación del ${pct(infl,1)}${infTxt}: `+(tae<infl?`pierde unos ${eur.format(parado*(infl-tae))} de poder de compra al año.`:'conserva su valor, pero apenas crece.'):`Por debajo de la inflación (${pct(infl,1)}${infTxt}) pierde poder de compra.`)
       +(pp>=.15?' Si no tiene un uso previsto, decide qué parte quieres invertir y a qué ritmo.':''));
   }
   // reparto objetivo
@@ -4471,6 +4497,8 @@ function renderInversiones(){
   const nAct=salud.filter(x=>x.estado==='actuar').length, nVig=salud.filter(x=>x.estado==='vigilar').length;
   const EST={bien:'Bien',vigilar:'Vigilar',actuar:'Revisar'}, PRI={alta:'Alta',media:'Media',baja:'Baja'};
   const anaOculto=ls.get('invAnalisisOculto')==='1';
+  const nt=D.noticias, ntOk=nt?.contexto?.length && i===A.length-1 && nt.generado.slice(0,10)>=(s.importado||s.creado||'').slice(0,10);
+  const ctx=ntOk?nt.contexto:(com.contexto||[]);
   const anaHTML=`<div class="card invcom invana ${anaOculto?'plegado':''}" id="invAna">
       <div class="anahead"><div style="min-width:0"><div class="eyebrow muted">Análisis del mes</div>
         <p class="tit">${invTxt(com.titular||'Cómo están tus finanzas')}</p>
@@ -4479,7 +4507,7 @@ function renderInversiones(){
       <div class="cuerpo" id="invAnaCuerpo">
         ${com.resumen?`<p>${invTxt(com.resumen)}</p>`:''}
         ${salud.length?`<h3>Salud de tus finanzas</h3><div class="salud">${salud.map(x=>`<div class="sal ${x.estado}"><div class="h"><b>${esc(x.titulo)}</b><span class="est">${EST[x.estado]}</span></div><p>${invTxt(x.texto)}</p></div>`).join('')}</div>`:''}
-        ${com.contexto?.length?`<h3>Lo que pasa en el mundo y cómo te toca</h3><div class="ctx">${com.contexto.map(x=>`<div class="cx"><div class="h"><b>${esc(x.tema)}</b>${x.fecha?`<span class="muted">${fmtFecha(x.fecha)}</span>`:''}</div><p>${invTxt(x.texto)}</p>${x.teAfecta?`<p class="afecta">${invTxt(x.teAfecta)}</p>`:''}${x.fuente?.url?`<a href="${esc(x.fuente.url)}" target="_blank" rel="noopener noreferrer">${esc(x.fuente.nombre||'Fuente')} ↗</a>`:x.fuente?.nombre?`<span class="muted">${esc(x.fuente.nombre)}</span>`:''}</div>`).join('')}</div>`:''}
+        ${ctx.length?`<h3>Lo que pasa en el mundo y cómo te toca${ntOk?` <span class="muted" style="font-weight:400;font-size:12px">· actualizado el ${fmtFecha(nt.generado.slice(0,10))} a las ${nt.generado.slice(11,16)}</span>`:''}</h3>${ntOk&&nt.resumen?`<p>${invTxt(nt.resumen)}</p>`:''}<div class="ctx">${ctx.map(x=>`<div class="cx"><div class="h"><b>${esc(x.tema)}</b>${x.fecha?`<span class="muted">${fmtFecha(x.fecha)}</span>`:''}</div><p>${invTxt(x.texto)}</p>${x.teAfecta?`<p class="afecta">${invTxt(x.teAfecta)}</p>`:''}${x.fuente?.url?`<a href="${esc(x.fuente.url)}" target="_blank" rel="noopener noreferrer">${esc(x.fuente.nombre||'Fuente')} ↗</a>`:x.fuente?.nombre?`<span class="muted">${esc(x.fuente.nombre)}</span>`:''}</div>`).join('')}</div>`:''}
         ${com.puntos?.length?`<h3>Tu cartera este mes</h3><ul>${com.puntos.map(p=>`<li><span aria-hidden="true">${ICO[p.tipo]||'•'}</span><span>${invTxt(p.texto)}</span></li>`).join('')}</ul>`:''}
         ${com.acciones?.length?`<h3>Qué revisar</h3><ol class="acc">${com.acciones.map(a=>`<li class="${a.prioridad}"><span class="pri">${PRI[a.prioridad]}</span><span>${invTxt(a.texto)}</span></li>`).join('')}</ol>`:''}
         ${com.seguimiento?.length?`<h3>Seguimiento del mes pasado</h3><ul>${com.seguimiento.map(x=>`<li><span aria-hidden="true">${x.estado==='hecho'?'✔️':'⏳'}</span><span>${invTxt(x.texto)}</span></li>`).join('')}</ul>`:''}
