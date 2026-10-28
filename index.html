@@ -687,7 +687,7 @@ const fmtFecha = f => { const [y,m,d]=f.split('-'); return `${+d} ${MESES[+m-1]}
 const toDate = f => new Date(f+'T12:00:00');
 const hoy = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
 // La pone automatico/publicar_web.py al publicar; en local es 'dev'
-const VERSION='9d25c541';
+const VERSION='30a73e21';
 function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('show'),2600); }
 const uid = p => p+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 
@@ -4539,7 +4539,7 @@ function renderInversiones(){
   const nt=D.noticias, ntOk=nt?.contexto?.length && i===A.length-1 && nt.generado.slice(0,10)>=(s.importado||s.creado||'').slice(0,10);
   const fx=ntOk?nt:com, ctx=fx.contexto||[], ops=fx.opiniones||[], mks=fx.mercados||[];
   const tuyas=invClases(s,fichas,t,banc), tuOk=ls.get('invTuCartera')==='1';
-  const enlace=f=>f?.url?`<a href="${esc(f.url)}" target="_blank" rel="noopener noreferrer">${esc(f.nombre||'Fuente')} ↗</a>`:f?.nombre?`<span class="muted">${esc(f.nombre)}</span>`:'';
+  const enlace=f=>/^https?:\/\//i.test(f?.url||'')?`<a href="${esc(f.url)}" target="_blank" rel="noopener noreferrer">${esc(f.nombre||'Fuente')} ↗</a>`:f?.nombre?`<span class="muted">${esc(f.nombre)}</span>`:'';
   const titular=(ntOk&&nt.titular)||com.titular||'Lo que pasa en los mercados';
   const anaHTML=`<div class="card invcom invana ${anaOculto?'plegado':''}" id="invAna">
       <div class="anahead"><div style="min-width:0"><div class="eyebrow muted">Actualidad y mercados${ntOk?` · ${fmtFecha(nt.generado.slice(0,10))}, ${nt.generado.slice(11,16)}`:''}</div>
