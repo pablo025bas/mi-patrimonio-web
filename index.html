@@ -218,6 +218,26 @@ html.privado .priv,html.privado input[inputmode="decimal"],html.privado .sticky 
 .invana ol.acc li{display:flex;gap:10px;align-items:baseline;font-size:14px}
 .invana .pri{flex:none;font-size:11px;font-weight:650;border-radius:4px;padding:1px 6px;background:var(--surface-2);color:var(--text-2)}
 .invana li.alta .pri{color:var(--neg)}
+.invana .mks{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:6px;margin-top:12px}
+.invana .mk{background:var(--surface-2);border-radius:8px;padding:6px 9px;display:flex;flex-direction:column;font-size:12px;line-height:1.35}
+.invana .mk b{font-size:14px;font-weight:650;color:var(--text)}
+.invana .cat{margin-bottom:2px;font-size:10.5px;font-weight:650;text-transform:uppercase;letter-spacing:.04em;color:var(--accent)}
+.invana .ops{display:flex;flex-direction:column;gap:8px}
+.invana .op{border-left:2px solid var(--border);padding:2px 0 2px 10px}
+.invana .op .h{display:flex;align-items:baseline;gap:8px;font-size:13px}
+.invana .op .h span{margin-left:auto;font-size:11.5px}
+.invana .op p{font-size:12.5px;margin:3px 0 0}
+.invana .op a{font-size:12px;color:var(--accent)}
+.invana .carts{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:8px}
+.invana .cart{background:var(--surface-2);border-radius:8px;padding:9px 11px}
+.invana .cart.tuya{outline:1px solid var(--accent)}
+.invana .cart .h{display:flex;align-items:baseline;gap:8px;font-size:13px}
+.invana .cart .h span{margin-left:auto;font-size:11.5px}
+.invana .cart p{font-size:12px;margin:6px 0 0}
+.invana .cbar{display:flex;height:10px;border-radius:4px;overflow:hidden;margin-top:7px;background:var(--surface)}
+.invana .cbar i{display:block;height:100%}
+.invana details.tucart{margin-top:16px;border-top:1px solid var(--border);padding-top:10px}
+.invana details.tucart>summary{cursor:pointer;font-size:13.5px}
 .invcom .tit{font-size:17px;font-weight:650;margin:0 0 6px;letter-spacing:-.01em}
 .invcom p{margin:0;color:var(--text-2)}
 .invcom p.tit{color:var(--text)}
@@ -667,7 +687,7 @@ const fmtFecha = f => { const [y,m,d]=f.split('-'); return `${+d} ${MESES[+m-1]}
 const toDate = f => new Date(f+'T12:00:00');
 const hoy = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
 // La pone automatico/publicar_web.py al publicar; en local es 'dev'
-const VERSION='8b920144';
+const VERSION='9d25c541';
 function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('show'),2600); }
 const uid = p => p+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 
@@ -4206,8 +4226,8 @@ function aplicarNoticias(n){
   if(!n||typeof n!=='object'||typeof n.generado!=='string') return 0;
   let cambio=0;
   if(!D.noticias || n.generado>D.noticias.generado){
-    const c=invLimpiarComentario({contexto:n.contexto});
-    D.noticias={generado:n.generado.slice(0,19),resumen:typeof n.resumen==='string'?n.resumen:'',contexto:c.contexto||[],inflacion:n.inflacion||null}; cambio=1;
+    const c=invLimpiarComentario({titular:n.titular,resumen:n.resumen,contexto:n.contexto,opiniones:n.opiniones,mercados:n.mercados,periodoMercados:n.periodoMercados});
+    D.noticias={generado:n.generado.slice(0,19),titular:c.titular||'',resumen:c.resumen||'',contexto:c.contexto||[],opiniones:c.opiniones||[],mercados:c.mercados||[],periodoMercados:c.periodoMercados||'',inflacion:n.inflacion||null}; cambio=1;
   }
   if(n.inflacion && aplicarInflacion(n.inflacion)) cambio=1;
   return cambio;
@@ -4360,7 +4380,11 @@ function invLimpiarComentario(c){
   for(const k of ['titular','resumen']) if(c[k]!=null) c[k]=txt(c[k]);
   lista('puntos',o=>({tipo:de(o.tipo,['bien','atencion','idea'],'idea'),texto:o.texto}));
   lista('salud',o=>({area:txt(o.area)||'otro',estado:de(o.estado,['bien','vigilar','actuar'],'vigilar'),titulo:txt(o.titulo),texto:o.texto}));
-  lista('contexto',o=>{ const u=txt(o.fuente?.url).trim(); return {tema:txt(o.tema),texto:o.texto,teAfecta:txt(o.teAfecta),fecha:/^\d{4}-\d\d-\d\d$/.test(o.fecha||'')?o.fecha:'',fuente:{nombre:txt(o.fuente?.nombre),url:/^https?:\/\//i.test(u)?u:''}}; });
+  const fuente=f=>{ const u=txt(f?.url).trim(); return {nombre:txt(f?.nombre),url:/^https?:\/\//i.test(u)?u:''}; }, fecha=f=>/^\d{4}-\d\d-\d\d$/.test(f||'')?f:'';
+  lista('contexto',o=>({tema:txt(o.tema),categoria:txt(o.categoria),texto:o.texto,teAfecta:txt(o.teAfecta),fecha:fecha(o.fecha),fuente:fuente(o.fuente)}));
+  lista('opiniones',o=>({quien:txt(o.quien),texto:o.texto,fecha:fecha(o.fecha),fuente:fuente(o.fuente)}));
+  c.mercados=Array.isArray(c.mercados)?c.mercados.filter(m=>m&&txt(m.nombre)&&txt(String(m.valor??''))).map(m=>({nombre:txt(m.nombre),valor:String(m.valor),var:typeof m.var==='number'&&isFinite(m.var)?m.var:null})).slice(0,12):[]; if(!c.mercados.length) delete c.mercados;
+  if(c.periodoMercados!=null) c.periodoMercados=txt(c.periodoMercados);
   lista('acciones',o=>({prioridad:de(o.prioridad,['alta','media','baja'],'media'),texto:o.texto}));
   lista('seguimiento',o=>({estado:de(o.estado,['hecho','pendiente'],'pendiente'),texto:o.texto}));
   return c;
@@ -4377,6 +4401,21 @@ function invImportar(x){
 }
 // Cifras dentro de un texto, envueltas para que «Ocultar importes» las difumine
 const invTxt = s => esc(s).replace(/([+−-]?\d[\d.,]*\s?(?:k?€|%))/g,'<span class="priv">$1</span>');
+// Carteras de referencia públicas (información general, no una recomendación para nadie en concreto)
+const INV_CLASES={acciones:{n:'Bolsa',c:'--s2'},bonos:{n:'Bonos',c:'--s3'},liquidez:{n:'Liquidez y monetario',c:'--s1'},oro:{n:'Oro',c:'--s4'},materias:{n:'Materias primas',c:'--s7'},cripto:{n:'Cripto',c:'--s5'},otros:{n:'Otros',c:'--muted'}};
+const INV_CARTERAS=[
+  {n:'Clásica 60/40',r:'Riesgo medio',d:'60 % bolsa mundial y 40 % bonos: la referencia de siempre. Los bonos amortiguan las caídas de la bolsa.',c:{acciones:60,bonos:40}},
+  {n:'Indexada 80/20',r:'Riesgo medio-alto',d:'La más habitual para quien invierte a más de 15 años: fondos indexados mundiales con un 20 % en bonos (como Vanguard LifeStrategy 80 %).',c:{acciones:80,bonos:20}},
+  {n:'Permanente (Harry Browne)',r:'Riesgo bajo',d:'Un cuarto en bolsa, bonos largos, oro y liquidez: pensada para aguantar cualquier escenario económico, con menos crecimiento.',c:{acciones:25,bonos:25,oro:25,liquidez:25}},
+  {n:'All Weather (Ray Dalio)',r:'Riesgo medio-bajo',d:'Versión simplificada: mucha renta fija, algo de oro y materias primas, para equilibrar el riesgo entre escenarios.',c:{acciones:30,bonos:55,oro:7.5,materias:7.5}},
+];
+function invClases(s,fichas,t,banc){
+  const v={}; const add=(k,x)=>{ if(x>0) v[k]=(v[k]||0)+x; };
+  s.brokers.forEach(b=>(b.posiciones||[]).forEach(p=>{ const k=invEstilo(p,fichas); add(['indexada','activa','acciones','sin_especificar'].includes(k)?'acciones':k==='renta_fija'?'bonos':k==='monetario'||k==='efectivo'?'liquidez':k==='oro'?'oro':k==='cripto'?'cripto':'otros',p.valorEur||0); }));
+  add('liquidez',(t.efectivo||0)+(banc.total||0));
+  const T=Object.values(v).reduce((a,x)=>a+x,0); return T?Object.fromEntries(Object.entries(v).map(([k,x])=>[k,x/T*100])):{};
+}
+const barraClases=c=>`<div class="cbar">${Object.keys(INV_CLASES).filter(k=>c[k]>0.4).map(k=>`<i style="width:${c[k].toFixed(1)}%;background:var(${INV_CLASES[k].c})" title="${INV_CLASES[k].n} ${pct(c[k]/100,0)}"></i>`).join('')}</div>`;
 // Salud de tus finanzas: comprobaciones que hace la app con tus datos (colchón, dinero parado, reparto, concentración, cripto, pérdidas, el mes)
 const INV_AREAS={colchon:'Colchón de emergencia',liquidez:'Dinero parado',reparto:'Reparto objetivo',concentracion:'Concentración',cripto:'Cripto',perdidas:'Pérdidas latentes',mes:'Este mes'};
 function invChequeos({s,t,fichas,F,hist,remu}){
@@ -4498,21 +4537,35 @@ function renderInversiones(){
   const EST={bien:'Bien',vigilar:'Vigilar',actuar:'Revisar'}, PRI={alta:'Alta',media:'Media',baja:'Baja'};
   const anaOculto=ls.get('invAnalisisOculto')==='1';
   const nt=D.noticias, ntOk=nt?.contexto?.length && i===A.length-1 && nt.generado.slice(0,10)>=(s.importado||s.creado||'').slice(0,10);
-  const ctx=ntOk?nt.contexto:(com.contexto||[]);
+  const fx=ntOk?nt:com, ctx=fx.contexto||[], ops=fx.opiniones||[], mks=fx.mercados||[];
+  const tuyas=invClases(s,fichas,t,banc), tuOk=ls.get('invTuCartera')==='1';
+  const enlace=f=>f?.url?`<a href="${esc(f.url)}" target="_blank" rel="noopener noreferrer">${esc(f.nombre||'Fuente')} ↗</a>`:f?.nombre?`<span class="muted">${esc(f.nombre)}</span>`:'';
+  const titular=(ntOk&&nt.titular)||com.titular||'Lo que pasa en los mercados';
   const anaHTML=`<div class="card invcom invana ${anaOculto?'plegado':''}" id="invAna">
-      <div class="anahead"><div style="min-width:0"><div class="eyebrow muted">Análisis del mes</div>
-        <p class="tit">${invTxt(com.titular||'Cómo están tus finanzas')}</p>
-        <p class="pleg muted">${[nAct?`${nAct} para revisar`:'',nVig?`${nVig} para vigilar`:'',salud.length-nAct-nVig?`${salud.length-nAct-nVig} bien`:''].filter(Boolean).join(' · ')}</p></div>
+      <div class="anahead"><div style="min-width:0"><div class="eyebrow muted">Actualidad y mercados${ntOk?` · ${fmtFecha(nt.generado.slice(0,10))}, ${nt.generado.slice(11,16)}`:''}</div>
+        <p class="tit">${invTxt(titular)}</p>
+        <p class="pleg muted">${[ctx.length?`${ctx.length} noticias`:'',ops.length?`${ops.length} opiniones de expertos`:'',nAct?`tu cartera: ${nAct} para revisar`:''].filter(Boolean).join(' · ')}</p></div>
         <button class="btn sm" id="invAnaBtn" aria-expanded="${!anaOculto}" aria-controls="invAnaCuerpo">${anaOculto?'Mostrar':'Ocultar'}</button></div>
       <div class="cuerpo" id="invAnaCuerpo">
-        ${com.resumen?`<p>${invTxt(com.resumen)}</p>`:''}
-        ${salud.length?`<h3>Salud de tus finanzas</h3><div class="salud">${salud.map(x=>`<div class="sal ${x.estado}"><div class="h"><b>${esc(x.titulo)}</b><span class="est">${EST[x.estado]}</span></div><p>${invTxt(x.texto)}</p></div>`).join('')}</div>`:''}
-        ${ctx.length?`<h3>Lo que pasa en el mundo y cómo te toca${ntOk?` <span class="muted" style="font-weight:400;font-size:12px">· actualizado el ${fmtFecha(nt.generado.slice(0,10))} a las ${nt.generado.slice(11,16)}</span>`:''}</h3>${ntOk&&nt.resumen?`<p>${invTxt(nt.resumen)}</p>`:''}<div class="ctx">${ctx.map(x=>`<div class="cx"><div class="h"><b>${esc(x.tema)}</b>${x.fecha?`<span class="muted">${fmtFecha(x.fecha)}</span>`:''}</div><p>${invTxt(x.texto)}</p>${x.teAfecta?`<p class="afecta">${invTxt(x.teAfecta)}</p>`:''}${x.fuente?.url?`<a href="${esc(x.fuente.url)}" target="_blank" rel="noopener noreferrer">${esc(x.fuente.nombre||'Fuente')} ↗</a>`:x.fuente?.nombre?`<span class="muted">${esc(x.fuente.nombre)}</span>`:''}</div>`).join('')}</div>`:''}
-        ${com.puntos?.length?`<h3>Tu cartera este mes</h3><ul>${com.puntos.map(p=>`<li><span aria-hidden="true">${ICO[p.tipo]||'•'}</span><span>${invTxt(p.texto)}</span></li>`).join('')}</ul>`:''}
-        ${com.acciones?.length?`<h3>Qué revisar</h3><ol class="acc">${com.acciones.map(a=>`<li class="${a.prioridad}"><span class="pri">${PRI[a.prioridad]}</span><span>${invTxt(a.texto)}</span></li>`).join('')}</ol>`:''}
-        ${com.seguimiento?.length?`<h3>Seguimiento del mes pasado</h3><ul>${com.seguimiento.map(x=>`<li><span aria-hidden="true">${x.estado==='hecho'?'✔️':'⏳'}</span><span>${invTxt(x.texto)}</span></li>`).join('')}</ul>`:''}
-        ${!com.titular&&!com.resumen&&!com.puntos?.length?`<p class="muted" style="font-size:12.5px;margin-top:12px">Para un análisis con las noticias del mes y qué revisar, pide a Claude el «cierre de inversiones» o «rehaz el análisis del mes».</p>`:''}
-        <p class="muted" style="font-size:11.5px;margin-top:12px">Análisis informativo hecho con tus datos y noticias públicas: no es asesoramiento financiero profesional ni recomienda comprar o vender valores concretos.</p>
+        ${ntOk&&nt.resumen?`<p>${invTxt(nt.resumen)}</p>`:''}
+        ${mks.length?`<div class="mks">${mks.map(m=>`<div class="mk"><span class="muted">${esc(m.nombre)}</span><b class="num">${esc(m.valor)}</b>${m.var!=null?`<span class="num ${cls(m.var)}">${m.var>0?'+':m.var<0?'−':''}${nf2.format(Math.abs(m.var))} %</span>`:''}</div>`).join('')}</div>${fx.periodoMercados?`<p class="muted" style="font-size:11.5px;margin:4px 0 0">Variación ${esc(fx.periodoMercados)}</p>`:''}`:''}
+        ${ctx.length?`<h3>Noticias</h3><div class="ctx">${ctx.map(x=>`<div class="cx">${x.categoria?`<div class="cat">${esc(x.categoria)}</div>`:''}<div class="h"><b>${esc(x.tema)}</b>${x.fecha?`<span class="muted">${fmtFecha(x.fecha)}</span>`:''}</div><p>${invTxt(x.texto)}</p>${x.teAfecta?`<p class="afecta">${invTxt(x.teAfecta)}</p>`:''}${enlace(x.fuente)}</div>`).join('')}</div>`:''}
+        ${ops.length?`<h3>Qué dicen los expertos</h3><div class="ops">${ops.map(x=>`<div class="op"><div class="h"><b>${esc(x.quien)}</b>${x.fecha?`<span class="muted">${fmtFecha(x.fecha)}</span>`:''}</div><p>${invTxt(x.texto)}</p>${enlace(x.fuente)}</div>`).join('')}</div>`:''}
+        <h3>Carteras de referencia</h3>
+        <div class="carts">
+          ${Object.keys(tuyas).length?`<div class="cart tuya"><div class="h"><b>La tuya hoy</b><span class="muted">con el efectivo de tus bancos</span></div>${barraClases(tuyas)}<p>${Object.keys(INV_CLASES).filter(k=>tuyas[k]>=0.5).map(k=>`${INV_CLASES[k].n} ${pct(tuyas[k]/100,0)}`).join(' · ')}</p></div>`:''}
+          ${INV_CARTERAS.map(c=>`<div class="cart"><div class="h"><b>${esc(c.n)}</b><span class="muted">${esc(c.r)}</span></div>${barraClases(c.c)}<p>${esc(c.d)}</p></div>`).join('')}
+        </div>
+        <div class="legend" style="margin-top:6px">${Object.keys(INV_CLASES).filter(k=>tuyas[k]>0.4||INV_CARTERAS.some(c=>c.c[k])).map(k=>`<span><i style="background:var(${INV_CLASES[k].c})"></i>${INV_CLASES[k].n}</span>`).join('')}</div>
+        <p class="muted" style="font-size:12px;margin:2px 0 0">Más bolsa suele dar más rentabilidad a largo plazo, con caídas más fuertes por el camino; más bonos, oro y liquidez dan menos sustos y menos crecimiento.</p>
+        <details class="tucart" id="invTuCart" ${tuOk?'open':''}><summary><b>Tu cartera y tus objetivos</b> <span class="muted">${[nAct?`${nAct} para revisar`:'',nVig?`${nVig} para vigilar`:'',salud.length-nAct-nVig?`${salud.length-nAct-nVig} bien`:''].filter(Boolean).join(' · ')}</span></summary>
+          ${com.resumen?`<p style="margin-top:8px">${invTxt(com.resumen)}</p>`:''}
+          ${salud.length?`<div class="salud" style="margin-top:10px">${salud.map(x=>`<div class="sal ${x.estado}"><div class="h"><b>${esc(x.titulo)}</b><span class="est">${EST[x.estado]}</span></div><p>${invTxt(x.texto)}</p></div>`).join('')}</div>`:''}
+          ${com.puntos?.length?`<h3>Tu cartera este mes</h3><ul>${com.puntos.map(p=>`<li><span aria-hidden="true">${ICO[p.tipo]||'•'}</span><span>${invTxt(p.texto)}</span></li>`).join('')}</ul>`:''}
+          ${com.acciones?.length?`<h3>Qué revisar</h3><ol class="acc">${com.acciones.map(a=>`<li class="${a.prioridad}"><span class="pri">${PRI[a.prioridad]}</span><span>${invTxt(a.texto)}</span></li>`).join('')}</ol>`:''}
+          ${com.seguimiento?.length?`<h3>Seguimiento del mes pasado</h3><ul>${com.seguimiento.map(x=>`<li><span aria-hidden="true">${x.estado==='hecho'?'✔️':'⏳'}</span><span>${invTxt(x.texto)}</span></li>`).join('')}</ul>`:''}
+        </details>
+        <p class="muted" style="font-size:11.5px;margin-top:12px">Noticias y opiniones públicas con su fuente (las opiniones son de quien se cita) y carteras de referencia generales. No es asesoramiento financiero personalizado: antes de decidir, valora tu situación o consulta a un asesor registrado en la CNMV.</p>
       </div></div>`;
   const k=[
     {l:'Valor de tus inversiones',v:eur.format(t.total),d:P?`<span class="${cls(t.total-P.t.total)}">${sgn(t.total-P.t.total)}</span> vs. ${fmtMes(P.s.mes)}`:`${eur.format(t.valores)} invertido · ${eur.format(t.efectivo)} en efectivo`,hero:1},
@@ -4555,6 +4608,7 @@ function renderInversiones(){
     <div class="card" style="margin-bottom:14px"><div class="cardhead"><h2>Posiciones</h2><div class="seg" id="invGrpSeg"><button data-g="broker">Por broker</button><button data-g="activo">Por tipo</button><button data-g="sector">Por sector</button><button data-g="">Todas</button></div></div><div class="tablewrap"><table id="invPos"></table></div><p class="muted" id="invVend" style="font-size:12.5px;margin:8px 0 0"></p></div>
     ${comis.length?`<details class="card" style="margin-bottom:14px"><summary><b>Comisiones</b></summary><div class="tablewrap"><table><thead><tr><th>Broker</th><th class="r">Este mes</th><th class="r">En el año</th></tr></thead><tbody>${comis.map(b=>`<tr><td>${logo(b.entidad)}${esc(b.entidad)}</td><td class="r num priv">${b.comisiones.mes!=null?eur2.format(b.comisiones.mes):'—'}</td><td class="r num priv">${b.comisiones.anio!=null?eur2.format(b.comisiones.anio):'—'}</td></tr>`).join('')}</tbody></table></div></details>`:''}
     <p class="muted" style="font-size:12px"><span title="Rentabilidad del mes: método Dietz modificado, descuenta aportaciones y retiradas. La del año encadena los meses (TWR).">Rentabilidad sin aportaciones (Dietz/TWR).</span> <button class="linkbtn" id="invDel">Borrar este cierre de inversiones</button></p>`;
+  $('#invTuCart').ontoggle=e=>ls.set('invTuCartera',e.target.open?'1':'0');
   $('#invAnaBtn').onclick=()=>{ const c=$('#invAna'), o=!c.classList.contains('plegado'); c.classList.toggle('plegado',o); ls.set('invAnalisisOculto',o?'1':'0'); const b=$('#invAnaBtn'); b.textContent=o?'Mostrar':'Ocultar'; b.setAttribute('aria-expanded',!o); };
   // evolución
   const evo=$('#chInvEv');
