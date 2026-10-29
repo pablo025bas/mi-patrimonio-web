@@ -51,7 +51,7 @@ button,input,select{font:inherit;color:inherit}
 .wrap{max-width:1180px;margin:0 auto;padding:0 16px 80px}
 header{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--border)}
 .bar{max-width:1180px;margin:0 auto;padding:10px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-.brand{font-weight:650;font-size:16px;display:flex;align-items:center;gap:8px;margin-right:8px}
+.brand{font-weight:650;font-size:16px;display:flex;align-items:center;gap:8px;margin-right:8px;cursor:pointer;user-select:none;-webkit-tap-highlight-color:transparent}
 nav{display:flex;gap:2px;background:var(--surface-2);border-radius:9px;padding:3px}
 nav button{border:0;background:none;padding:6px 12px;border-radius:7px;cursor:pointer;color:var(--text-2);white-space:nowrap}
 nav button[aria-selected="true"]{background:var(--surface);color:var(--text);box-shadow:var(--shadow);font-weight:560}
@@ -303,7 +303,7 @@ nav .ti{display:none}nav .s{display:none}
 <div id="splash" aria-hidden="true"><svg width="76" height="76" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="#2a78d6"/><path d="M7 22l6-7 5 4 7-9" stroke="white" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
 <header>
   <div class="bar">
-    <div class="brand"><svg width="22" height="22" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="var(--accent)"/><path d="M7 22l6-7 5 4 7-9" stroke="white" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="brandtxt">Mi Patrimonio</span></div>
+    <div class="brand" id="brand" role="button" tabindex="0" title="Ver la versión de la app"><svg width="22" height="22" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="var(--accent)"/><path d="M7 22l6-7 5 4 7-9" stroke="white" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="brandtxt">Mi Patrimonio</span></div>
     <nav id="tabs" role="tablist">
       <button data-tab="resumen" aria-selected="true"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V11M10 20V4M16 20v-6M22 20H2"/></svg><span>Resumen</span></button>
       <button data-tab="inversiones"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9h-9z"/><path d="M15 3.5A9 9 0 0 1 20.5 9H15z"/></svg><span class="f">Inversiones</span><span class="s">Cartera</span></button>
@@ -687,7 +687,7 @@ const fmtFecha = f => { const [y,m,d]=f.split('-'); return `${+d} ${MESES[+m-1]}
 const toDate = f => new Date(f+'T12:00:00');
 const hoy = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
 // La pone automatico/publicar_web.py al publicar; en local es 'dev'
-const VERSION='30a73e21';
+const VERSION='cac4deca';
 function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('show'),2600); }
 const uid = p => p+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 
@@ -4807,6 +4807,24 @@ boot().catch(e=>console.error(e)).finally(()=>$('#splash').classList.add('off'))
 setTimeout(()=>$('#splash').classList.add('off'),8000);
 if('serviceWorker' in navigator && location.protocol==='https:') navigator.serviceWorker.register('sw.js').catch(()=>{});
 $('#verInfo').textContent='Versión de la app: '+(VERSION==='dev'?'local (sin publicar)':VERSION);
+$('#brand').title='Versión '+(VERSION==='dev'?'local':VERSION)+' · toca para comprobar si es la última';
+// Tocar el logo: muestra la versión y la compara con la publicada; si hay otra, se actualiza
+async function verVersion(){
+  const v='Versión '+(VERSION==='dev'?'local (sin publicar)':VERSION);
+  if(VERSION==='dev' || location.protocol!=='https:'){ toast(v); return; }
+  toast(v+' · comprobando…');
+  try{
+    const txt=await fetch('./?v='+Date.now(),{cache:'no-store'}).then(r=>r.ok?r.text():'');
+    const nueva=(txt.match(/const VERSION='([^']+)'/)||[])[1];
+    if(!nueva){ toast(v+' · no se pudo comprobar'); return; }
+    if(nueva===VERSION){ toast(v+' · es la última ✓'); return; }
+    toast(v+' · hay una nueva ('+nueva+'). Actualizando…');
+    navigator.serviceWorker?.getRegistration().then(r=>r&&r.update()).catch(()=>{});
+    setTimeout(()=>location.reload(),1200);
+  }catch(e){ toast(v+' · sin conexión para comprobar'); }
+}
+$('#brand').addEventListener('click',verVersion);
+$('#brand').addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); verVersion(); } });
 // En el iPhone la app instalada puede seguir con una copia antigua: al abrirla o volver a ella se mira si hay otra versión publicada y se recarga
 async function buscarVersion(){
   if(VERSION==='dev' || location.protocol!=='https:' || !navigator.onLine) return;
