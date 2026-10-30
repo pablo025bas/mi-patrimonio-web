@@ -687,8 +687,11 @@ const fmtFecha = f => { const [y,m,d]=f.split('-'); return `${+d} ${MESES[+m-1]}
 const toDate = f => new Date(f+'T12:00:00');
 const hoy = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
 // La pone automatico/publicar_web.py al publicar; en local es 'dev'
-const VERSION='cac4deca';
-function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('show'),2600); }
+const VERSION='63a8fc12';
+function toast(msg,ms=2600){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('show'),ms); }
+// Último refresh: al abrir la app y cada vez que se traen datos nuevos o se comprueba OneDrive (se muestra al tocar el logo)
+let ultimoRefresh=Date.now();
+function txtRefresh(){ const d=new Date(ultimoRefresh), h=d.toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'}); return 'último refresh '+(d.toDateString()===new Date().toDateString()?'hoy':d.toLocaleDateString('es-ES',{day:'2-digit',month:'2-digit',year:'numeric'}))+' '+h; }
 const uid = p => p+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 
 /* ============ Evaluador de expresiones (tipo Excel, sin eval) ============ */
@@ -950,7 +953,7 @@ async function checkExternal(){
     const f = await fileHandle.getFile();
     if(f.lastModified > fileStamp + 1500){
       D = await leerDatos(await f.text()); fileStamp=f.lastModified; guardarCache();
-      renderAll(); toast('Datos actualizados desde OneDrive');
+      renderAll(); ultimoRefresh=Date.now(); toast('Datos actualizados desde OneDrive');
     }
   }catch(e){}
 }
@@ -1059,6 +1062,7 @@ async function odRefrescar(forzar){
   try{
     await saving; const m=await odMeta(od.ruta);
     if(m && m.ctag!==od.ctag){ const r=await odLeer(od.ruta); D=await leerDatos(r.texto); od.etag=r.etag; od.ctag=r.ctag; guardarCache(); renderAll(); setStatus('ok','OneDrive · sincronizado'); toast('Datos actualizados desde OneDrive'); }
+    ultimoRefresh=Date.now();
   }catch(e){ if(e.login) setStatus('err','Sesión caducada · toca aquí'); }
 }
 async function odEstado(){
@@ -4807,21 +4811,21 @@ boot().catch(e=>console.error(e)).finally(()=>$('#splash').classList.add('off'))
 setTimeout(()=>$('#splash').classList.add('off'),8000);
 if('serviceWorker' in navigator && location.protocol==='https:') navigator.serviceWorker.register('sw.js').catch(()=>{});
 $('#verInfo').textContent='Versión de la app: '+(VERSION==='dev'?'local (sin publicar)':VERSION);
-$('#brand').title='Versión '+(VERSION==='dev'?'local':VERSION)+' · toca para comprobar si es la última';
+$('#brand').title='Versión '+(VERSION==='dev'?'local':VERSION)+' · toca para ver la versión y el último refresh';
 // Tocar el logo: muestra la versión y la compara con la publicada; si hay otra, se actualiza
 async function verVersion(){
-  const v='Versión '+(VERSION==='dev'?'local (sin publicar)':VERSION);
-  if(VERSION==='dev' || location.protocol!=='https:'){ toast(v); return; }
-  toast(v+' · comprobando…');
+  const v='Versión '+(VERSION==='dev'?'local (sin publicar)':VERSION)+' · '+txtRefresh();
+  if(VERSION==='dev' || location.protocol!=='https:'){ toast(v,6000); return; }
+  toast(v+' · comprobando…',6000);
   try{
     const txt=await fetch('./?v='+Date.now(),{cache:'no-store'}).then(r=>r.ok?r.text():'');
     const nueva=(txt.match(/const VERSION='([^']+)'/)||[])[1];
-    if(!nueva){ toast(v+' · no se pudo comprobar'); return; }
-    if(nueva===VERSION){ toast(v+' · es la última ✓'); return; }
-    toast(v+' · hay una nueva ('+nueva+'). Actualizando…');
+    if(!nueva){ toast(v+' · no se pudo comprobar',6000); return; }
+    if(nueva===VERSION){ toast(v+' · es la última ✓',6000); return; }
+    toast(v+' · hay una nueva ('+nueva+'). Actualizando…',6000);
     navigator.serviceWorker?.getRegistration().then(r=>r&&r.update()).catch(()=>{});
     setTimeout(()=>location.reload(),1200);
-  }catch(e){ toast(v+' · sin conexión para comprobar'); }
+  }catch(e){ toast(v+' · sin conexión para comprobar',6000); }
 }
 $('#brand').addEventListener('click',verVersion);
 $('#brand').addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); verVersion(); } });
